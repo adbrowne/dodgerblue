@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
-module Control.ConcurrentDsl
+module DodgerBlue
     ( evalDslIO,
       forkChild,
       newQueue,
@@ -12,8 +12,8 @@ module Control.ConcurrentDsl
 
 import           Data.Typeable
 import           Control.Monad.Free.Church
-import           Control.ConcurrentDsl.IO
-import           Control.ConcurrentDsl.Types
+import           DodgerBlue.IO
+import           DodgerBlue.Types
 
 forkChild :: (Functor d, MonadFree (CustomDsl q d) m) => F (CustomDsl q d) () -> m ()
 forkChild p = liftF . DslBase $ ForkChild' p ()

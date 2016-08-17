@@ -1,7 +1,8 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GADTs #-}
-module Control.ConcurrentDsl.Types
+
+module DodgerBlue.Types
   (CustomDsl(..),
    ConcurrentDslCmd(..)) where
 

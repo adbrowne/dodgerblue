@@ -1,9 +1,9 @@
 {-# LANGUAGE RankNTypes #-}
-module Control.ConcurrentDsl.IO
+module DodgerBlue.IO
   (evalDslIO)
 where
 
-import           Control.ConcurrentDsl.Types
+import           DodgerBlue.Types
 import           Control.Concurrent        (threadDelay)
 import           Control.Concurrent.Async
 import           Control.Concurrent.STM

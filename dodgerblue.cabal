@@ -1,8 +1,8 @@
-name:                concurrent-dsl
+name:                dodgerblue
 version:             0.1.0.0
 synopsis:            Library to aid in building a testable DSL with concurrency primitives
 description:         Please see README.md
-homepage:            https://github.com/adbrowne/concurrent-dsl#readme
+homepage:            https://github.com/adbrowne/dodgerblue#readme
 license:             BSD3
 license-file:        LICENSE
 author:              Andrew Browne
@@ -15,9 +15,9 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Control.ConcurrentDsl
-                     , Control.ConcurrentDsl.IO
-                     , Control.ConcurrentDsl.Types
+  exposed-modules:     DodgerBlue
+                     , DodgerBlue.IO
+                     , DodgerBlue.Types
   build-depends:       base >= 4.7 && < 5
                      , async
                      , free
@@ -27,20 +27,20 @@ library
                      , mtl
   default-language:    Haskell2010
 
-executable concurrent-dsl-exe
+executable dodgerblue-exe
   hs-source-dirs:      app
   main-is:             Main.hs
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
-                     , concurrent-dsl
+                     , dodgerblue
   default-language:    Haskell2010
 
-test-suite concurrent-dsl-test
+test-suite dodgerblue-test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             Spec.hs
   build-depends:       base
-                     , concurrent-dsl
+                     , dodgerblue
                      , stm
                      , free
                      , tasty
@@ -51,4 +51,4 @@ test-suite concurrent-dsl-test
 
 source-repository head
   type:     git
-  location: https://github.com/adbrowne/concurrent-dsl
+  location: https://github.com/adbrowne/dodgerblue

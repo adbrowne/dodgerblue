@@ -1,6 +1,8 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DeriveFunctor #-}
+
 import Control.Concurrent.STM
-import Control.ConcurrentDsl
+import DodgerBlue
 import Test.Tasty
 import Control.Monad.Free.Church
 import Test.Tasty.Hspec
@@ -27,18 +29,19 @@ myEvalIO ::
   -> IO a
 myEvalIO = evalDslIO id (\(MyDslFunctions n) -> n)
 
-assertProgramResult :: (Eq a, Show a) => a -> MyDsl TQueue a -> IO ()
-assertProgramResult expected program = do
-  result <- myEvalIO program
-  result `shouldBe` expected
+unitTestSpecs :: (forall a. MyDsl q a -> IO a) -> SpecWith ()
+unitTestSpecs dslRunner = do
+  describe "evalDslIO" $ do
+    it "can write and try read from queue" $
+      assertProgramResult (Just 1) writeAndTryRead
+    it "can write and read from queue" $
+      assertProgramResult 1 writeAndRead
+  where
+    assertProgramResult expected program = do
+      result <- dslRunner program
+      result `shouldBe` expected
 
 main :: IO ()
 main = do
-  spec1 <- testSpec "Unit tests" $ do
-      describe "evalDslIO" $ do
-        it "can write and try read from queue" $
-          assertProgramResult (Just 1) writeAndTryRead
-        it "can write and read from queue" $
-          assertProgramResult 1 writeAndRead
-
-  defaultMain $ testGroup "Tests" [ spec1 ]
+  unitTestSpecsIO <- testSpec "Unit tests IO" (unitTestSpecs myEvalIO)
+  defaultMain $ testGroup "Tests" [ unitTestSpecsIO ]
