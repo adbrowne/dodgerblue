@@ -12,6 +12,7 @@ data ConcurrentDslCmd q d next where
   NewQueue' :: Typeable a => (q a -> next) -> ConcurrentDslCmd q d next
   WriteQueue' :: Typeable a => q a -> a -> next -> ConcurrentDslCmd q d next
   TryReadQueue' :: Typeable a => q a ->  (Maybe a -> next) -> ConcurrentDslCmd q d next
+  ReadQueue' :: Typeable a => q a ->  (a -> next) -> ConcurrentDslCmd q d next
   ForkChild' :: F (CustomDsl q d) () -> next -> ConcurrentDslCmd q d next
   Wait' :: Int -> next -> ConcurrentDslCmd q d next
   SetPulseStatus' :: Bool -> next -> ConcurrentDslCmd q d next

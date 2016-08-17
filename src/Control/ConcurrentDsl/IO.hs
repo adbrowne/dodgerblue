@@ -20,6 +20,9 @@ writeQueue q a = (liftIO . atomically) (writeTQueue q a)
 tryReadQueue :: (MonadIO m) => TQueue a -> m (Maybe a)
 tryReadQueue q = (liftIO . atomically) (tryReadTQueue q)
 
+readQueue :: (MonadIO m) => TQueue a -> m a
+readQueue q = (liftIO . atomically) (readTQueue q)
+
 delayMilliseconds :: (MonadIO m) => Int -> m ()
 delayMilliseconds milliseconds = (liftIO $ threadDelay (milliseconds * 1000))
 
@@ -38,6 +41,8 @@ evalDslIO runChild stepCustomCommand p = iterM stepProgram p
       writeQueue q a >> n
     stepProgram (DslBase (TryReadQueue' q n)) =
       tryReadQueue q >>= n
+    stepProgram (DslBase (ReadQueue' q n)) =
+      readQueue q >>= n
     stepProgram (DslBase (ForkChild' childProgram n)) = do
       let runner = evalDslIO runChild stepCustomCommand childProgram
       void . liftIO $ async (runChild runner)

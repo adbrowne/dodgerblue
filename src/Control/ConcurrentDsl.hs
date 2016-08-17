@@ -5,6 +5,7 @@ module Control.ConcurrentDsl
       newQueue,
       writeQueue,
       tryReadQueue,
+      readQueue,
       wait,
       setPulseStatus,
       CustomDsl) where
@@ -25,6 +26,9 @@ writeQueue queue item = liftF . DslBase $ WriteQueue' queue item ()
 
 tryReadQueue :: (Functor d, MonadFree (CustomDsl q d) m, Typeable a) => q a -> m (Maybe a)
 tryReadQueue queue = liftF . DslBase $ TryReadQueue' queue id
+
+readQueue :: (Functor d, MonadFree (CustomDsl q d) m, Typeable a) => q a -> m a
+readQueue queue = liftF . DslBase $ ReadQueue' queue id
 
 wait :: (Functor d, MonadFree (CustomDsl q d) m) => Int -> m ()
 wait seconds = liftF . DslBase $ Wait' seconds ()

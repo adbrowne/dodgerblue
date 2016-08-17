@@ -10,23 +10,35 @@ data MyDslFunctions next = MyDslFunctions next
 
 type MyDsl q = F (CustomDsl q MyDslFunctions)
 
-myProgram :: MyDsl q (Maybe Int)
-myProgram = do
+writeAndTryRead :: MyDsl q (Maybe Int)
+writeAndTryRead = do
   q <- newQueue
   writeQueue q 1
   tryReadQueue q
 
+writeAndRead :: MyDsl q Int
+writeAndRead = do
+  q <- newQueue
+  writeQueue q 1
+  readQueue q
+
 myEvalIO ::
-  F (CustomDsl TQueue MyDslFunctions) a
+  MyDsl TQueue a
   -> IO a
 myEvalIO = evalDslIO id (\(MyDslFunctions n) -> n)
+
+assertProgramResult :: (Eq a, Show a) => a -> MyDsl TQueue a -> IO ()
+assertProgramResult expected program = do
+  result <- myEvalIO program
+  result `shouldBe` expected
 
 main :: IO ()
 main = do
   spec1 <- testSpec "Unit tests" $ do
       describe "evalDslIO" $ do
-        it "can write and read from queue" $ do
-          result <- myEvalIO myProgram
-          result `shouldBe`Just 1
+        it "can write and try read from queue" $
+          assertProgramResult (Just 1) writeAndTryRead
+        it "can write and read from queue" $
+          assertProgramResult 1 writeAndRead
 
   defaultMain $ testGroup "Tests" [ spec1 ]
