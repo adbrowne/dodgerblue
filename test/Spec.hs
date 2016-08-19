@@ -28,6 +28,12 @@ writeAndRead = do
   writeQueue q 1
   readQueue q
 
+writeFromAChildProcess :: MyDsl q Int
+writeFromAChildProcess = do
+  q <- newQueue
+  forkChild (writeQueue q 1)
+  readQueue q
+
 myEvalIO ::
   MyDsl TQueue a
   -> IO a
@@ -55,6 +61,8 @@ unitTestSpecs dslRunner = do
       assertProgramResult (Just 1) writeAndTryRead
     it "can write and read from queue" $
       assertProgramResult 1 writeAndRead
+    it "can write in child process and read from queue" $
+      assertProgramResult 1 writeFromAChildProcess
   where
     assertProgramResult expected program = do
       result <- dslRunner program
