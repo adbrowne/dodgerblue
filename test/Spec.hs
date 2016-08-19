@@ -44,7 +44,7 @@ instance HasTestQueues TestState where
 myEvalTest ::
   MyDsl Queue a
   -> IO a
-myEvalTest p = return $ evalState (evalDslTest (\(MyDslFunctions n) -> n) p) initialState
+myEvalTest p = return $ evalState (evalDslTest (\(MyDslFunctions n) -> return n) p) initialState
   where
     initialState = TestState { _testStateQueues = emptyQueues }
 
