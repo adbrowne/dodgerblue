@@ -1,9 +1,13 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE TemplateHaskell #-}
 
+import Control.Lens
 import Control.Concurrent.STM
 import DodgerBlue
+import DodgerBlue.Testing
 import Test.Tasty
+import           Control.Monad.State
 import Control.Monad.Free.Church
 import Test.Tasty.Hspec
 
@@ -29,6 +33,21 @@ myEvalIO ::
   -> IO a
 myEvalIO = evalDslIO id (\(MyDslFunctions n) -> n)
 
+data TestState = TestState {
+  _testStateQueues :: Queues }
+
+$(makeLenses ''TestState)
+
+instance HasTestQueues TestState where
+  testQueues = testStateQueues
+
+myEvalTest ::
+  MyDsl Queue a
+  -> IO a
+myEvalTest p = return $ evalState (evalDslTest (\(MyDslFunctions n) -> n) p) initialState
+  where
+    initialState = TestState { _testStateQueues = emptyQueues }
+
 unitTestSpecs :: (forall a. MyDsl q a -> IO a) -> SpecWith ()
 unitTestSpecs dslRunner = do
   describe "evalDslIO" $ do
@@ -43,5 +62,8 @@ unitTestSpecs dslRunner = do
 
 main :: IO ()
 main = do
-  unitTestSpecsIO <- testSpec "Unit tests IO" (unitTestSpecs myEvalIO)
-  defaultMain $ testGroup "Tests" [ unitTestSpecsIO ]
+  unitTestSpecsIO <- testSpec "Unit tests - IO" (unitTestSpecs myEvalIO)
+  unitTestSpecsTest <- testSpec "Unit tests - Test" (unitTestSpecs myEvalTest)
+  defaultMain $ testGroup "Tests" [
+    unitTestSpecsIO,
+    unitTestSpecsTest ]

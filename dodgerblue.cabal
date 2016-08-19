@@ -17,12 +17,16 @@ library
   hs-source-dirs:      src
   exposed-modules:     DodgerBlue
                      , DodgerBlue.IO
+                     , DodgerBlue.Testing
                      , DodgerBlue.Types
+  other-modules:       DodgerBlue.InMemoryQueues
   build-depends:       base >= 4.7 && < 5
                      , async
                      , free
+                     , containers
                      , QuickCheck
                      , stm
+                     , lens
                      , transformers
                      , mtl
   default-language:    Haskell2010
@@ -42,6 +46,8 @@ test-suite dodgerblue-test
   build-depends:       base
                      , dodgerblue
                      , stm
+                     , lens
+                     , mtl
                      , free
                      , tasty
                      , tasty-quickcheck

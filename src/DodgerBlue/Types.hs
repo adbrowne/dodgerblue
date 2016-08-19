@@ -1,10 +1,12 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GADTs #-}
 
 module DodgerBlue.Types
   (CustomDsl(..),
-   ConcurrentDslCmd(..)) where
+   ConcurrentDslCmd(..),
+   CustomCommandStep) where
 
 import Data.Typeable
 import Control.Monad.Free.Church
@@ -27,3 +29,5 @@ data CustomDsl q d next =
 instance Functor d => Functor (CustomDsl q d) where
   fmap f (DslBase a) = DslBase $ fmap f a
   fmap f (DslCustom a) = DslCustom $ fmap f a
+
+type CustomCommandStep t m = forall a. t (m a) -> m a

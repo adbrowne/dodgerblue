@@ -26,8 +26,6 @@ readQueue q = (liftIO . atomically) (readTQueue q)
 delayMilliseconds :: (MonadIO m) => Int -> m ()
 delayMilliseconds milliseconds = (liftIO $ threadDelay (milliseconds * 1000))
 
-type CustomCommandStep t m = forall a. t (m a) -> m a
-
 evalDslIO :: (MonadIO m) =>
   (m () -> IO ()) ->
   CustomCommandStep t m ->
