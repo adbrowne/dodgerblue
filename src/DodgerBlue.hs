@@ -12,7 +12,7 @@ module DodgerBlue
 
 import           Data.Typeable
 import           Control.Monad.Free.Church
-import           DodgerBlue.IO
+import           DodgerBlue.IO (evalDslIO)
 import           DodgerBlue.Types
 
 forkChild :: (Functor d, MonadFree (CustomDsl q d) m) => F (CustomDsl q d) () -> m ()

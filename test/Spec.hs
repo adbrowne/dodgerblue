@@ -6,7 +6,7 @@ import DodgerBlue.MyDslExample
 import Test.Tasty
 import Test.Tasty.Hspec
 
-unitTestSpecs :: (forall a. MyDsl q a -> IO a) -> SpecWith ()
+unitTestSpecs :: MonadMyDsl m => (forall a. m a -> IO a) -> SpecWith ()
 unitTestSpecs dslRunner = do
   describe "evalDslIO" $ do
     it "can write and try read from queue" $
@@ -24,6 +24,8 @@ main :: IO ()
 main = do
   unitTestSpecsIO <- testSpec "Unit tests - IO" (unitTestSpecs myEvalIO)
   unitTestSpecsTest <- testSpec "Unit tests - Test" (unitTestSpecs myEvalTest)
+  unitTestSpecsNoFree <- testSpec "Unit tests - NoFree" (unitTestSpecs id)
   defaultMain $ testGroup "Tests" [
     unitTestSpecsIO,
-    unitTestSpecsTest ]
+    unitTestSpecsTest,
+    unitTestSpecsNoFree ]

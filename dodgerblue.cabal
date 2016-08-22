@@ -48,6 +48,7 @@ test-suite dodgerblue-test
   build-depends:       base
                      , dodgerblue
                      , stm
+                     , async
                      , lens
                      , mtl
                      , free

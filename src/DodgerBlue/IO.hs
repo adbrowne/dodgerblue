@@ -1,6 +1,10 @@
 {-# LANGUAGE RankNTypes #-}
 module DodgerBlue.IO
-  (evalDslIO)
+  (evalDslIO,
+   newQueue,
+   writeQueue,
+   tryReadQueue,
+   readQueue)
 where
 
 import           DodgerBlue.Types
