@@ -17,7 +17,6 @@ where
 
 import           Control.Lens
 import           Data.Maybe (fromJust)
-import           Data.Monoid
 import           Control.Monad.Free.Church
 import qualified Control.Monad.Free                     as Free
 import           Control.Monad.State
@@ -82,8 +81,6 @@ instance HasDslEvalState EvalState where
 
 type TestCustomCommandStep t m = forall a. t (Free.Free (CustomDsl MemQ.Queue t) a) -> m (Free.Free (CustomDsl MemQ.Queue t) a)
 
-newtype ThreadStates t a = ThreadStates { unThreadStates :: Seq.Seq (EvalThread t a)}
-
 data ThreadGroup t a = ThreadGroup { threadGroupPrograms :: [(Text, F (CustomDsl MemQ.Queue t) a)] }
 
 data ThreadResultGroup a = ThreadResultGroup {
@@ -113,7 +110,7 @@ stepProgram _ cmd@(Free.Free (DslBase (ReadQueue' q n))) = do
                  Nothing -> return (StepResultContinue cmd)
 stepProgram _ (Free.Free (DslBase (ForkChild' childProgram n))) =
   return (StepResultFork n (fromF childProgram))
-stepProgram _ (Free.Free (DslBase a)) = error $ "todo DslBase _"
+stepProgram _ (Free.Free (DslBase _a)) = error $ "todo DslBase _"
 stepProgram stepCustomCommand (Free.Free (DslCustom cmd)) =
   stepCustomCommand cmd >>= return . StepResultContinue
 
@@ -121,13 +118,13 @@ buildLoopState :: Functor t => Map Text (ThreadGroup t a) -> LoopState t a
 buildLoopState threadMap =
   let
     threadQueue = fst $ Map.foldlWithKey buildThreadQueue (Seq.empty,0) threadMap
-    buildThreadQueue (threadQueue, index) threadGroupName ThreadGroup{..} =
+    buildThreadQueue (tq, i) threadGroupName ThreadGroup{..} =
       let
         node = Node { unNode = threadGroupName }
-        threadTree = ThreadTree { unThreadTree = index }
+        threadTree = ThreadTree { unThreadTree = i }
         newQueueItems = Seq.fromList $ buildEvalThread node threadTree <$> threadGroupPrograms
-        threadQueue' = newQueueItems Seq.>< threadQueue
-      in (threadQueue',index + 1)
+        tq' = newQueueItems Seq.>< tq
+      in (tq',i + 1)
     buildEvalThread node threadTree (name, startPosition) = EvalThread {
       evalThreadName = name,
       evalThreadPosition = External (fromF startPosition),
@@ -145,31 +142,31 @@ stepEvalThread ::
   m (LoopState t a -> LoopState t a)
 stepEvalThread stepCustomCommand evalThread@EvalThread{ evalThreadPosition = Internal p } = do
   result <- stepProgram stepCustomCommand p
-  case result of StepResultComplete a -> return $ id -- don't worry about complete internal threads
-                 StepResultContinue n -> return $ updateThread evalThread n
-                 StepResultFork n p -> return $ (addThread evalThread p) . (updateThread evalThread n)
+  case result of StepResultComplete () -> return $ id -- don't worry about complete internal threads
+                 StepResultContinue n -> return $ updateThread n
+                 StepResultFork n newProgram -> return $ (addThread newProgram) . (updateThread n)
   where
-    addThread parentThread childProgram ls =
-      let newThread = parentThread { evalThreadPosition = Internal childProgram }
+    addThread childProgram ls =
+      let newThread = evalThread { evalThreadPosition = Internal childProgram }
       in ls { loopStatePrograms = newThread Seq.<| (loopStatePrograms ls) }
-    updateThread evalThread n ls =
+    updateThread n ls =
       let evalThread' = evalThread { evalThreadPosition = Internal n }
       in ls { loopStatePrograms = evalThread' Seq.<| (loopStatePrograms ls) }
 stepEvalThread stepCustomCommand evalThread@EvalThread { evalThreadPosition = External p } = do
   result <- stepProgram stepCustomCommand p
   case result of StepResultComplete a -> return $ addResult evalThread a
-                 StepResultContinue n -> return $ updateThread evalThread n
-                 StepResultFork n p -> return $ (addThread evalThread p) . (updateThread evalThread n)
+                 StepResultContinue n -> return $ updateThread n
+                 StepResultFork n newProgram -> return $ (addThread newProgram) . (updateThread n)
   where
     addResult EvalThread{..} a ls@LoopState{..}=
       let
         resultGroup = ThreadResultGroup [(evalThreadName, a)]
         loopStateResults' = Map.insert (unNode evalThreadNode) resultGroup loopStateResults
       in ls { loopStateResults = loopStateResults' }
-    addThread parentThread childProgram ls =
-      let newThread = parentThread { evalThreadPosition = Internal childProgram }
+    addThread childProgram ls =
+      let newThread = evalThread { evalThreadPosition = Internal childProgram }
       in ls { loopStatePrograms = newThread Seq.<| (loopStatePrograms ls) }
-    updateThread evalThread n ls =
+    updateThread n ls =
       let evalThread' = evalThread { evalThreadPosition = External n }
       in ls { loopStatePrograms = evalThread' Seq.<| (loopStatePrograms ls) }
 
@@ -203,9 +200,3 @@ evalDslTest stepCustomCommand p =
     resultSet = evalMultiDslTest stepCustomCommand inputMap
   in
     fromJust . (lookup mainThreadKey) . threadResultGroupPrograms . (Map.! mainThreadKey) <$> resultSet
-  where
-    go cmd = do
-      r <- stepProgram stepCustomCommand cmd
-      case r of StepResultComplete a -> return a
-                StepResultContinue n -> go n
-                StepResultFork n p   -> go n

@@ -42,6 +42,7 @@ executable dodgerblue-exe
 
 test-suite dodgerblue-test
   type:                exitcode-stdio-1.0
+  other-modules:       DodgerBlue.MyDslExample
   hs-source-dirs:      test
   main-is:             Spec.hs
   build-depends:       base
