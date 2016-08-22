@@ -2,7 +2,6 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-import Control.Lens
 import Control.Concurrent.STM
 import DodgerBlue
 import DodgerBlue.Testing
@@ -39,20 +38,10 @@ myEvalIO ::
   -> IO a
 myEvalIO = evalDslIO id (\(MyDslFunctions n) -> n)
 
-data TestState = TestState {
-  _testStateQueues :: Queues }
-
-$(makeLenses ''TestState)
-
-instance HasTestQueues TestState where
-  testQueues = testStateQueues
-
 myEvalTest ::
   MyDsl Queue a
   -> IO a
-myEvalTest p = return $ evalState (evalDslTest (\(MyDslFunctions n) -> return n) p) initialState
-  where
-    initialState = TestState { _testStateQueues = emptyQueues }
+myEvalTest p = return $ evalState (evalDslTest (\(MyDslFunctions n) -> return n) p) emptyEvalState
 
 unitTestSpecs :: (forall a. MyDsl q a -> IO a) -> SpecWith ()
 unitTestSpecs dslRunner = do

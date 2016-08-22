@@ -26,6 +26,7 @@ library
                      , containers
                      , QuickCheck
                      , stm
+                     , text
                      , lens
                      , transformers
                      , mtl
@@ -49,6 +50,7 @@ test-suite dodgerblue-test
                      , lens
                      , mtl
                      , free
+                     , text
                      , tasty
                      , tasty-quickcheck
                      , tasty-hspec
