@@ -12,10 +12,13 @@ module DodgerBlue.Testing
    HasDslEvalState(..),
    MemQ.Queue,
    MemQ.Queues,
+   ThreadGroup(..),
+   ThreadResultGroup(..),
    emptyEvalState)
 where
 
 import           Control.Lens
+import           Data.Monoid
 import           Control.Monad.Free.Church
 import qualified Control.Monad.Free                     as Free
 import           Control.Monad.State
@@ -80,7 +83,10 @@ instance HasDslEvalState EvalState where
 
 type TestCustomCommandStep t m = forall a. t (Free.Free (CustomDsl MemQ.Queue t) a) -> m (Free.Free (CustomDsl MemQ.Queue t) a)
 
-data ThreadGroup t a = ThreadGroup { threadGroupPrograms :: [(Text, F (CustomDsl MemQ.Queue t) a)] }
+data ThreadGroup t a = ThreadGroup { threadGroupPrograms :: Map Text (F (CustomDsl MemQ.Queue t) a) }
+
+instance Show (ThreadGroup t a) where
+  show a = "ThreadGroup { threadGroupPrograms = " <> show ((Map.keys . threadGroupPrograms) a) <> " }"
 
 data ThreadResultGroup a = ThreadResultGroup {
   threadResultGroupPrograms :: Map Text a }
@@ -116,15 +122,16 @@ stepProgram stepCustomCommand (Free.Free (DslCustom cmd)) =
 buildLoopState :: Functor t => Map Text (ThreadGroup t a) -> LoopState t a
 buildLoopState threadMap =
   let
+    emptyResults = (const $ ThreadResultGroup mempty) <$> threadMap
     threadQueue = fst $ Map.foldlWithKey buildThreadQueue (Seq.empty,0) threadMap
     buildThreadQueue (tq, i) threadGroupName ThreadGroup{..} =
       let
         node = Node { unNode = threadGroupName }
         threadTree = ThreadTree { unThreadTree = i }
-        newQueueItems = Seq.fromList $ buildEvalThread node threadTree <$> threadGroupPrograms
+        newQueueItems = Seq.fromList $ Map.elems $ Map.mapWithKey (buildEvalThread node threadTree) threadGroupPrograms
         tq' = newQueueItems Seq.>< tq
       in (tq',i + 1)
-    buildEvalThread node threadTree (name, startPosition) = EvalThread {
+    buildEvalThread node threadTree name startPosition = EvalThread {
       evalThreadName = name,
       evalThreadPosition = External (fromF startPosition),
       evalThreadNode = node,
@@ -132,7 +139,7 @@ buildLoopState threadMap =
   in
     LoopState {
       loopStatePrograms = threadQueue,
-      loopStateResults = mempty }
+      loopStateResults = emptyResults }
 
 stepEvalThread ::
   (MonadState s m, HasDslEvalState s, Functor t) =>
@@ -159,8 +166,7 @@ stepEvalThread stepCustomCommand evalThread@EvalThread { evalThreadPosition = Ex
   where
     addResult EvalThread{..} a ls@LoopState{..}=
       let
-        resultGroup = ThreadResultGroup $ Map.singleton evalThreadName a
-        loopStateResults' = Map.insert (unNode evalThreadNode) resultGroup loopStateResults
+        loopStateResults' = Map.adjust (\b -> b { threadResultGroupPrograms = Map.insert evalThreadName a (threadResultGroupPrograms b)}) (unNode evalThreadNode) loopStateResults
       in ls { loopStateResults = loopStateResults' }
     addThread childProgram ls =
       let newThread = evalThread { evalThreadPosition = Internal childProgram }
@@ -195,7 +201,7 @@ evalDslTest ::
 evalDslTest stepCustomCommand p =
   let
     mainThreadKey = "MainThread"
-    inputMap = Map.singleton mainThreadKey (ThreadGroup { threadGroupPrograms = [(mainThreadKey, p)]})
+    inputMap = Map.singleton mainThreadKey (ThreadGroup { threadGroupPrograms = Map.singleton mainThreadKey p})
     resultSet = evalMultiDslTest stepCustomCommand inputMap
   in
     (Map.! mainThreadKey) . threadResultGroupPrograms . (Map.! mainThreadKey) <$> resultSet

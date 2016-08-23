@@ -47,6 +47,9 @@ test-suite dodgerblue-test
   main-is:             Spec.hs
   build-depends:       base
                      , dodgerblue
+                     , containers
+                     , QuickCheck
+                     , quickcheck-instances
                      , stm
                      , async
                      , lens

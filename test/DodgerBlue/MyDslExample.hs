@@ -1,9 +1,9 @@
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DeriveFunctor          #-}
+{-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE RankNTypes             #-}
+{-# LANGUAGE TypeFamilies           #-}
 
 module DodgerBlue.MyDslExample
   (writeAndTryRead
@@ -11,18 +11,22 @@ module DodgerBlue.MyDslExample
   ,writeFromAChildProcess
   ,MyDsl
   ,MonadMyDsl
+  ,MyDslFunctions
   ,myEvalIO
-  ,myEvalTest)
+  ,myEvalTest
+  ,myEvalMultiDslTest)
   where
 
+import           Control.Concurrent.Async
+import           Control.Concurrent.STM
+import           Control.Monad.Free.Church
+import           Control.Monad.State
+import qualified Data.Map.Strict           as Map
+import           Data.Text                 (Text)
+import           Data.Typeable
 import qualified DodgerBlue
+import qualified DodgerBlue.IO             as DslIO
 import qualified DodgerBlue.Testing
-import qualified DodgerBlue.IO as DslIO
-import Control.Concurrent.Async
-import Control.Concurrent.STM
-import Control.Monad.Free.Church
-import Control.Monad.State
-import Data.Typeable
 
 data MyDslFunctions next =
     MyDslFunctions next
@@ -34,19 +38,19 @@ class Monad m =>
       MonadMyDsl m  where
     type QueueType m :: * -> *
     newQueue
-        :: forall a. 
+        :: forall a.
            Typeable a
         => m (QueueType m a)
     writeQueue
-        :: forall a. 
+        :: forall a.
            Typeable a
         => QueueType m a -> a -> m ()
     readQueue
-        :: forall a. 
+        :: forall a.
            Typeable a
         => QueueType m a -> m a
     tryReadQueue
-        :: forall a. 
+        :: forall a.
            Typeable a
         => QueueType m a -> m (Maybe a)
     forkChild :: m () -> m ()
@@ -92,18 +96,29 @@ writeFromAChildProcess = do
     readQueue q
 
 myEvalIO :: MyDsl TQueue a -> IO a
-myEvalIO = 
+myEvalIO =
     DodgerBlue.evalDslIO
         id
-        (\(MyDslFunctions n) -> 
+        (\(MyDslFunctions n) ->
               n)
 
+myEvalMultiDslTest ::
+  Map.Map Text (DodgerBlue.Testing.ThreadGroup MyDslFunctions a)
+  -> Map.Map Text (DodgerBlue.Testing.ThreadResultGroup a)
+myEvalMultiDslTest programs =
+    evalState
+        (DodgerBlue.Testing.evalMultiDslTest
+             (\(MyDslFunctions n) ->
+                   return n)
+             programs)
+        DodgerBlue.Testing.emptyEvalState
+
 myEvalTest :: MyDsl DodgerBlue.Testing.Queue a -> IO a
-myEvalTest p = 
+myEvalTest p =
     return $
     evalState
         (DodgerBlue.Testing.evalDslTest
-             (\(MyDslFunctions n) -> 
+             (\(MyDslFunctions n) ->
                    return n)
              p)
         DodgerBlue.Testing.emptyEvalState
