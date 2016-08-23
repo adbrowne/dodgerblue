@@ -35,15 +35,16 @@ import           DodgerBlue.Types
 newtype ThreadTree = ThreadTree { unThreadTree :: Int }
 newtype Node = Node { unNode :: Text }
 
-data ProgramPosition t a =
-  External (Free.Free (CustomDsl MemQ.Queue t) a)
-  | Internal (Free.Free (CustomDsl MemQ.Queue t) ())
+data ProgramState t a=
+  ExternalProgramRunning (Free.Free (CustomDsl MemQ.Queue t) a)
+  | ExternalProgramComplete a
+  | InternalProgramRunning (Free.Free (CustomDsl MemQ.Queue t) ())
 
 data EvalThread t a = EvalThread {
   evalThreadName :: Text,
   evalThreadTree :: ThreadTree,
   evalThreadNode :: Node,
-  evalThreadPosition :: ProgramPosition t a }
+  evalThreadState :: ProgramState t a }
 
 data EvalState = EvalState {
   _evalStateQueues :: MemQ.Queues
@@ -144,7 +145,7 @@ buildLoopState threadMap =
       in (tq',i + 1)
     buildEvalThread node threadTree name startPosition = EvalThread {
       evalThreadName = name,
-      evalThreadPosition = External (fromF startPosition),
+      evalThreadState = ExternalProgramRunning (fromF startPosition),
       evalThreadNode = node,
       evalThreadTree = threadTree }
   in
@@ -157,19 +158,19 @@ stepEvalThread ::
   TestCustomCommandStep t m ->
   EvalThread t a ->
   m (LoopState t a -> LoopState t a)
-stepEvalThread stepCustomCommand evalThread@EvalThread{ evalThreadPosition = Internal p } = do
+stepEvalThread stepCustomCommand evalThread@EvalThread{ evalThreadState = InternalProgramRunning p } = do
   result <- stepProgram stepCustomCommand p
   case result of StepResultComplete () -> return $ id -- don't worry about complete internal threads
                  StepResultContinue n -> return $ updateThread n
                  StepResultFork n newProgram -> return $ (addThread newProgram) . (updateThread n)
   where
     addThread childProgram ls =
-      let newThread = evalThread { evalThreadPosition = Internal childProgram }
+      let newThread = evalThread { evalThreadState = InternalProgramRunning childProgram }
       in ls { loopStatePrograms = newThread Seq.<| (loopStatePrograms ls) }
     updateThread n ls =
-      let evalThread' = evalThread { evalThreadPosition = Internal n }
+      let evalThread' = evalThread { evalThreadState = InternalProgramRunning n }
       in ls { loopStatePrograms = evalThread' Seq.<| (loopStatePrograms ls) }
-stepEvalThread stepCustomCommand evalThread@EvalThread { evalThreadPosition = External p } = do
+stepEvalThread stepCustomCommand evalThread@EvalThread { evalThreadState = ExternalProgramRunning p } = do
   result <- stepProgram stepCustomCommand p
   case result of StepResultComplete a -> return $ addResult evalThread a
                  StepResultContinue n -> return $ updateThread n
@@ -180,11 +181,12 @@ stepEvalThread stepCustomCommand evalThread@EvalThread { evalThreadPosition = Ex
         loopStateResults' = Map.adjust (\b -> b { threadResultGroupPrograms = Map.insert evalThreadName (ThreadResult a) (threadResultGroupPrograms b)}) (unNode evalThreadNode) loopStateResults
       in ls { loopStateResults = loopStateResults' }
     addThread childProgram ls =
-      let newThread = evalThread { evalThreadPosition = Internal childProgram }
+      let newThread = evalThread { evalThreadState = InternalProgramRunning childProgram }
       in ls { loopStatePrograms = newThread Seq.<| (loopStatePrograms ls) }
     updateThread n ls =
-      let evalThread' = evalThread { evalThreadPosition = External n }
+      let evalThread' = evalThread { evalThreadState = ExternalProgramRunning n }
       in ls { loopStatePrograms = evalThread' Seq.<| (loopStatePrograms ls) }
+stepEvalThread _ EvalThread { evalThreadState = ExternalProgramComplete _ } = return id
 
 evalMultiDslTest ::
   (MonadState s m, HasDslEvalState s, Functor t) =>
