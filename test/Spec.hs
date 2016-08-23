@@ -18,7 +18,7 @@ unitTestSpecs
     :: MonadMyDsl m
     => (forall a. m a -> IO a) -> SpecWith ()
 unitTestSpecs dslRunner = do
-    describe "evalDslIO" $
+    describe "all evaluators unit tests" $
         do it "can write and try read from queue" $
                assertProgramResult (Just 1) writeAndTryRead
            it "can write and read from queue" $
@@ -29,6 +29,16 @@ unitTestSpecs dslRunner = do
     assertProgramResult expected program = do
         result <- dslRunner program
         result `shouldBe` expected
+
+testInterpreterUnitTests :: SpecWith ()
+testInterpreterUnitTests = do
+  describe "test interpreter unit tests" $
+      do it "blocked program returns blocked result" $
+            let
+              input = Map.singleton "main" (ThreadGroup $ Map.singleton "main" readForever)
+              result = myEvalMultiDslTest input
+              expected = Map.singleton "main" (ThreadResultGroup $ Map.singleton "main" (ThreadBlocked))
+            in result `shouldBe` expected
 
 genProgramSet :: Gen (Map Text (ThreadGroup MyDslFunctions Int))
 genProgramSet = do
@@ -48,15 +58,16 @@ prop_allProgramsHaveAnOutput =
 main :: IO ()
 main = do
     unitTestSpecsIO <- testSpec "Unit tests - IO" (unitTestSpecs myEvalIO)
-    unitTestSpecsTest <-
-        testSpec "Unit tests - Test" (unitTestSpecs myEvalTest)
+    unitTestSpecsTest <- testSpec "Unit tests - Test" (unitTestSpecs myEvalTest)
     unitTestSpecsNoFree <- testSpec "Unit tests - NoFree" (unitTestSpecs id)
+    unitTestTestInterpreter <- testSpec "Unit tests - test interpreter" testInterpreterUnitTests
     defaultMain $
         testGroup
             "Tests"
             [ unitTestSpecsIO
             , unitTestSpecsTest
             , unitTestSpecsNoFree
+            , unitTestTestInterpreter
             , testProperty
                   "All programs have an output"
                   prop_allProgramsHaveAnOutput]

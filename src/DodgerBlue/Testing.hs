@@ -13,6 +13,7 @@ module DodgerBlue.Testing
    MemQ.Queue,
    MemQ.Queues,
    ThreadGroup(..),
+   ThreadResult(..),
    ThreadResultGroup(..),
    emptyEvalState)
 where
@@ -88,8 +89,18 @@ data ThreadGroup t a = ThreadGroup { threadGroupPrograms :: Map Text (F (CustomD
 instance Show (ThreadGroup t a) where
   show a = "ThreadGroup { threadGroupPrograms = " <> show ((Map.keys . threadGroupPrograms) a) <> " }"
 
+data ThreadResult a =
+  ThreadResult a
+  | ThreadBlocked
+  deriving (Eq, Show)
+
+fromThreadResult :: ThreadResult a -> a
+fromThreadResult (ThreadResult a) = a
+fromThreadResult ThreadBlocked = error "fromThreadResult: thread blocked"
+
 data ThreadResultGroup a = ThreadResultGroup {
-  threadResultGroupPrograms :: Map Text a }
+  threadResultGroupPrograms :: Map Text (ThreadResult a) }
+  deriving (Eq,Show)
 
 data LoopState t a = LoopState {
   loopStatePrograms :: Seq (EvalThread t a),
@@ -166,7 +177,7 @@ stepEvalThread stepCustomCommand evalThread@EvalThread { evalThreadPosition = Ex
   where
     addResult EvalThread{..} a ls@LoopState{..}=
       let
-        loopStateResults' = Map.adjust (\b -> b { threadResultGroupPrograms = Map.insert evalThreadName a (threadResultGroupPrograms b)}) (unNode evalThreadNode) loopStateResults
+        loopStateResults' = Map.adjust (\b -> b { threadResultGroupPrograms = Map.insert evalThreadName (ThreadResult a) (threadResultGroupPrograms b)}) (unNode evalThreadNode) loopStateResults
       in ls { loopStateResults = loopStateResults' }
     addThread childProgram ls =
       let newThread = evalThread { evalThreadPosition = Internal childProgram }
@@ -204,4 +215,4 @@ evalDslTest stepCustomCommand p =
     inputMap = Map.singleton mainThreadKey (ThreadGroup { threadGroupPrograms = Map.singleton mainThreadKey p})
     resultSet = evalMultiDslTest stepCustomCommand inputMap
   in
-    (Map.! mainThreadKey) . threadResultGroupPrograms . (Map.! mainThreadKey) <$> resultSet
+    fromThreadResult . (Map.! mainThreadKey) . threadResultGroupPrograms . (Map.! mainThreadKey) <$> resultSet

@@ -9,6 +9,7 @@ module DodgerBlue.MyDslExample
   (writeAndTryRead
   ,writeAndRead
   ,writeFromAChildProcess
+  ,readForever
   ,MyDsl
   ,MonadMyDsl
   ,MyDslFunctions
@@ -93,6 +94,13 @@ writeFromAChildProcess
 writeFromAChildProcess = do
     q <- newQueue
     forkChild (writeQueue q 1)
+    readQueue q
+
+readForever
+    :: MonadMyDsl m
+    => m Int
+readForever = do
+    q <- newQueue
     readQueue q
 
 myEvalIO :: MyDsl TQueue a -> IO a
