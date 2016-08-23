@@ -16,7 +16,6 @@ module DodgerBlue.Testing
 where
 
 import           Control.Lens
-import           Data.Maybe (fromJust)
 import           Control.Monad.Free.Church
 import qualified Control.Monad.Free                     as Free
 import           Control.Monad.State
@@ -84,7 +83,7 @@ type TestCustomCommandStep t m = forall a. t (Free.Free (CustomDsl MemQ.Queue t)
 data ThreadGroup t a = ThreadGroup { threadGroupPrograms :: [(Text, F (CustomDsl MemQ.Queue t) a)] }
 
 data ThreadResultGroup a = ThreadResultGroup {
-  threadResultGroupPrograms :: [(Text, a)] }
+  threadResultGroupPrograms :: Map Text a }
 
 data LoopState t a = LoopState {
   loopStatePrograms :: Seq (EvalThread t a),
@@ -160,7 +159,7 @@ stepEvalThread stepCustomCommand evalThread@EvalThread { evalThreadPosition = Ex
   where
     addResult EvalThread{..} a ls@LoopState{..}=
       let
-        resultGroup = ThreadResultGroup [(evalThreadName, a)]
+        resultGroup = ThreadResultGroup $ Map.singleton evalThreadName a
         loopStateResults' = Map.insert (unNode evalThreadNode) resultGroup loopStateResults
       in ls { loopStateResults = loopStateResults' }
     addThread childProgram ls =
@@ -199,4 +198,4 @@ evalDslTest stepCustomCommand p =
     inputMap = Map.singleton mainThreadKey (ThreadGroup { threadGroupPrograms = [(mainThreadKey, p)]})
     resultSet = evalMultiDslTest stepCustomCommand inputMap
   in
-    fromJust . (lookup mainThreadKey) . threadResultGroupPrograms . (Map.! mainThreadKey) <$> resultSet
+    (Map.! mainThreadKey) . threadResultGroupPrograms . (Map.! mainThreadKey) <$> resultSet
