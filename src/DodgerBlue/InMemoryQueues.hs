@@ -7,11 +7,13 @@ module DodgerBlue.InMemoryQueues
   (Queues
   ,Queue
   ,emptyQueues
+  ,isEmptyQueue
   ,newQueue
   ,writeToQueue
   ,tryReadFromQueue)
   where
 
+import Data.Maybe (isJust)
 import Data.Dynamic
 import qualified Data.Sequence as Seq
 import Data.Sequence ((<|), ViewR(..))
@@ -69,6 +71,31 @@ writeToQueue queues@Queues{..} Queue{..} item =
                          "InMemoryQueues.writeToQueue Invalid format for queue")
         in toDyn $ item <| items
 
+peekQueue :: Typeable a => Queues -> Queue a -> Maybe a
+peekQueue queues@Queues{..} Queue{..} = 
+    let q = queuesQueueMap Map.! unQueue
+        (maybeHead) = tryRead q
+    in maybeHead
+  where
+    tryRead Nothing = (Nothing)
+    tryRead (Just dyn) = 
+        let items = 
+                fromDyn
+                    dyn
+                    (error
+                         "InMemoryQueues.peekQueue Invalid format for queue")
+            (item) = tryReadSeq items
+        in (item)
+    tryReadSeq (Seq.viewr -> Seq.EmptyR) = (Nothing)
+    tryReadSeq (Seq.viewr -> _xs :> x) = (Just x)
+    tryReadSeq _ = error "match error on Seq"
+
+isEmptyQueue
+    :: Typeable a
+    => Queues -> Queue a -> Bool
+isEmptyQueue queues q =
+    not . isJust $ peekQueue queues q
+
 tryReadFromQueue
     :: Typeable a
     => Queues -> Queue a -> (Maybe a, Queues)
@@ -86,7 +113,7 @@ tryReadFromQueue queues@Queues{..} Queue{..} =
                 fromDyn
                     dyn
                     (error
-                         "InMemoryQueues.writeToQueue Invalid format for queue")
+                         "InMemoryQueues.tryReadFromQueue Invalid format for queue")
             (item,queue') = tryReadSeq items
         in (item, toDyn <$> queue')
     tryReadSeq (Seq.viewr -> Seq.EmptyR) = (Nothing, Nothing)

@@ -111,8 +111,8 @@ myEvalIO =
               n)
 
 myEvalMultiDslTest ::
-  Map.Map Text (DodgerBlue.Testing.ThreadGroup MyDslFunctions a)
-  -> Map.Map Text (DodgerBlue.Testing.ThreadResultGroup a)
+  DodgerBlue.Testing.ExecutionTree (DodgerBlue.Testing.TestProgram MyDslFunctions a)
+  -> DodgerBlue.Testing.ExecutionTree (DodgerBlue.Testing.ThreadResult a)
 myEvalMultiDslTest programs =
     evalState
         (DodgerBlue.Testing.evalMultiDslTest

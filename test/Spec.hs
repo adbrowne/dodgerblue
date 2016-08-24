@@ -6,6 +6,7 @@
 
 import           Data.Map.Strict         (Map)
 import qualified Data.Map.Strict         as Map
+import           Data.Monoid
 import           Data.Text               (Text)
 import           DodgerBlue.MyDslExample
 import           Test.QuickCheck.Instances ()
@@ -35,25 +36,29 @@ testInterpreterUnitTests = do
   describe "test interpreter unit tests" $
       do it "blocked program returns blocked result" $
             let
-              input = Map.singleton "main" (ThreadGroup $ Map.singleton "main" readForever)
+              input = ExecutionTree $ Map.singleton "main" (Map.singleton "main" readForever)
               result = myEvalMultiDslTest input
-              expected = Map.singleton "main" (ThreadResultGroup $ Map.singleton "main" (ThreadBlocked))
+              expected = ExecutionTree $ Map.singleton "main" (Map.singleton "main" (ThreadBlocked))
             in result `shouldBe` expected
 
-genProgramSet :: Gen (Map Text (ThreadGroup MyDslFunctions Int))
+data MyDslProgram = MyDslProgram { myDslProgramName :: String, unMyDslProgram :: MyDsl Queue Int }
+
+instance Show MyDslProgram where
+  show a = "dsl program: " <> myDslProgramName a
+
+genProgramSet :: Gen (ExecutionTree MyDslProgram)
 genProgramSet = do
-    (structure :: Map Text (Map Text ())) <- arbitrary
-    let (childProgram :: MyDsl Queue Int) = writeFromAChildProcess
-    (structureWithPrograms :: Map Text (Map Text (MyDsl Queue Int))) <- mapM (mapM (const $ return childProgram)) structure
-    let (result :: Map Text (ThreadGroup MyDslFunctions Int)) = fmap ThreadGroup structureWithPrograms
-    return result
+    (structure :: ExecutionTree ()) <- arbitrary
+    let (childProgram :: MyDslProgram) = MyDslProgram "writeFromAChildProcess" writeFromAChildProcess
+    (structureWithPrograms :: ExecutionTree MyDslProgram) <- traverse (const $ return childProgram) structure
+    return structureWithPrograms
 
 prop_allProgramsHaveAnOutput :: Property
 prop_allProgramsHaveAnOutput =
-    let programInput ps = (Map.keys . threadGroupPrograms) <$> ps
-        programOutput ps = (Map.keys . threadResultGroupPrograms) <$> (myEvalMultiDslTest ps)
+    let programInput ps = (const ()) <$> ps
+        programOutput ps = (const ()) <$> (myEvalMultiDslTest (unMyDslProgram <$> ps))
         programInputAndOutputTheSame ps = programInput ps === programOutput ps
-    in forAll genProgramSet programInputAndOutputTheSame
+    in forAll (resize 10 genProgramSet) programInputAndOutputTheSame
 
 main :: IO ()
 main = do
@@ -67,7 +72,7 @@ main = do
             [ unitTestSpecsIO
             , unitTestSpecsTest
             , unitTestSpecsNoFree
-            , unitTestTestInterpreter
-            , testProperty
+            , unitTestTestInterpreter 
+            , testProperty 
                   "All programs have an output"
-                  prop_allProgramsHaveAnOutput]
+                  prop_allProgramsHaveAnOutput] 

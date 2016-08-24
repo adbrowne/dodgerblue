@@ -25,6 +25,7 @@ library
                      , free
                      , containers
                      , QuickCheck
+                     , quickcheck-instances
                      , stm
                      , text
                      , lens
