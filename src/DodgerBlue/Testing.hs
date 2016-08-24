@@ -232,23 +232,41 @@ evalMultiDslTest ::
   ExecutionTree (TestProgram t a) ->
   m (ExecutionTree (ThreadResult a))
 evalMultiDslTest stepCustomCommand threadMap =
-  let
-    loopState = buildLoopState threadMap
-  in go loopState
+    let loopState = buildLoopState threadMap
+    in go loopState
   where
-    go loopState@LoopState { .. } = do
-      runnable <- runnablePrograms loopStatePrograms
-      case runnable of [] -> return $ buildResults loopState
-                       xs ->
-                         let next = chooseThread loopStateLastRan xs
-                         in progressThread loopState next
-    progressThread loopState@LoopState{..} (node, threadName, p) = do
-      (currentThreadUpdate, newThreadUpdate) <- stepEvalThread stepCustomCommand p
-      let updateCurrentThread = updateWithKeyExecutionTree (const currentThreadUpdate) node threadName
-      let loopState' = loopState { loopStatePrograms = ((addSubThread node threadName newThreadUpdate) . updateCurrentThread) loopStatePrograms }
-      go loopState'
-    addSubThread _   _  Nothing tree = tree
-    addSubThread node threadName (Just newProgramState) (ExecutionTree t) = ExecutionTree $ Map.adjust (mapInsertUniqueKeyWithSuffix threadName newProgramState) node t
+    go loopState@LoopState{..} = do
+        runnable <- runnablePrograms loopStatePrograms
+        case runnable of
+            [] -> return $ buildResults loopState
+            xs ->
+                let next = chooseThread loopStateLastRan xs
+                in progressThread loopState next
+    progressThread loopState@LoopState{..} (node,threadName,p) = do
+        (currentThreadUpdate,newThreadUpdate) <-
+            stepEvalThread stepCustomCommand p
+        let updateCurrentThread =
+                updateWithKeyExecutionTree
+                    (const currentThreadUpdate)
+                    node
+                    threadName
+        let loopState' =
+                loopState
+                { loopStatePrograms = ((addSubThread
+                                            node
+                                            threadName
+                                            newThreadUpdate) .
+                                       updateCurrentThread)
+                      loopStatePrograms
+                }
+        go loopState'
+    addSubThread _ _ Nothing tree = tree
+    addSubThread node threadName (Just newProgramState) (ExecutionTree t) =
+        ExecutionTree $
+        Map.adjust
+            (mapInsertUniqueKeyWithSuffix threadName newProgramState)
+            node
+            t
 
 evalDslTest ::
   (MonadState s m, HasDslEvalState s, Functor t) =>

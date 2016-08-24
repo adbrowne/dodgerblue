@@ -1,7 +1,7 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DeriveDataTypeable  #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ViewPatterns        #-}
 
 module DodgerBlue.InMemoryQueues
   (Queues
@@ -13,16 +13,16 @@ module DodgerBlue.InMemoryQueues
   ,tryReadFromQueue)
   where
 
-import Data.Maybe (isJust)
-import Data.Dynamic
-import qualified Data.Sequence as Seq
-import Data.Sequence ((<|), ViewR(..))
+import           Data.Dynamic
+import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Data.Map.Strict (Map)
+import           Data.Maybe      (isJust)
+import           Data.Sequence   (ViewR (..), (<|))
+import qualified Data.Sequence   as Seq
 
 data Queues = Queues
     { queuesNextIndex :: Int
-    , queuesQueueMap :: Map Int (Maybe Dynamic)
+    , queuesQueueMap  :: Map Int (Maybe Dynamic)
     } deriving ((Show))
 
 newtype Queue a = Queue
@@ -30,19 +30,19 @@ newtype Queue a = Queue
     } deriving ((Show))
 
 emptyQueues :: Queues
-emptyQueues = 
+emptyQueues =
     Queues
     { queuesNextIndex = 0
     , queuesQueueMap = mempty
     }
 
 newQueue :: Queues -> (Queue a, Queues)
-newQueue Queues{..} = 
-    let queueKey = 
+newQueue Queues{..} =
+    let queueKey =
             Queue
             { unQueue = queuesNextIndex
             }
-        queues = 
+        queues =
             Queues
             { queuesNextIndex = queuesNextIndex + 1
             , queuesQueueMap = Map.insert
@@ -55,7 +55,7 @@ newQueue Queues{..} =
 writeToQueue
     :: Typeable a
     => Queues -> Queue a -> a -> Queues
-writeToQueue queues@Queues{..} Queue{..} item = 
+writeToQueue queues@Queues{..} Queue{..} item =
     let q = queuesQueueMap Map.! unQueue
         updatedQueue = addItem q
     in queues
@@ -63,8 +63,8 @@ writeToQueue queues@Queues{..} Queue{..} item =
        }
   where
     addItem Nothing = toDyn $ Seq.singleton item
-    addItem (Just dyn) = 
-        let items = 
+    addItem (Just dyn) =
+        let items =
                 fromDyn
                     dyn
                     (error
@@ -72,14 +72,14 @@ writeToQueue queues@Queues{..} Queue{..} item =
         in toDyn $ item <| items
 
 peekQueue :: Typeable a => Queues -> Queue a -> Maybe a
-peekQueue queues@Queues{..} Queue{..} = 
+peekQueue queues@Queues{..} Queue{..} =
     let q = queuesQueueMap Map.! unQueue
         (maybeHead) = tryRead q
     in maybeHead
   where
     tryRead Nothing = (Nothing)
-    tryRead (Just dyn) = 
-        let items = 
+    tryRead (Just dyn) =
+        let items =
                 fromDyn
                     dyn
                     (error
@@ -99,7 +99,7 @@ isEmptyQueue queues q =
 tryReadFromQueue
     :: Typeable a
     => Queues -> Queue a -> (Maybe a, Queues)
-tryReadFromQueue queues@Queues{..} Queue{..} = 
+tryReadFromQueue queues@Queues{..} Queue{..} =
     let q = queuesQueueMap Map.! unQueue
         (maybeItem,updatedQueue) = tryRead q
     in ( maybeItem
@@ -108,8 +108,8 @@ tryReadFromQueue queues@Queues{..} Queue{..} =
          })
   where
     tryRead Nothing = (Nothing, Nothing)
-    tryRead (Just dyn) = 
-        let items = 
+    tryRead (Just dyn) =
+        let items =
                 fromDyn
                     dyn
                     (error
