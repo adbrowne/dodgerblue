@@ -33,12 +33,18 @@ unitTestSpecs dslRunner = do
 
 testInterpreterUnitTests :: SpecWith ()
 testInterpreterUnitTests = do
-  describe "test interpreter unit tests" $
-      do it "blocked program returns blocked result" $
+  describe "test interpreter unit tests" $ do
+    it "blocked program returns blocked result" $
             let
               input = ExecutionTree $ Map.singleton "main" (Map.singleton "main" readForever)
               result = myEvalMultiDslTest input
               expected = ExecutionTree $ Map.singleton "main" (Map.singleton "main" (ThreadBlocked))
+            in result `shouldBe` expected
+    it "idle program returns idle result" $
+            let
+              input = ExecutionTree $ Map.singleton "main" (Map.singleton "main" idleForever)
+              result = myEvalMultiDslTest input
+              expected = ExecutionTree $ Map.singleton "main" (Map.singleton "main" (ThreadIdle))
             in result `shouldBe` expected
 
 data MyDslProgram = MyDslProgram { myDslProgramName :: String, unMyDslProgram :: MyDsl Queue Int }
