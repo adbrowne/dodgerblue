@@ -72,7 +72,7 @@ writeToQueue queues@Queues{..} Queue{..} item =
         in toDyn $ item <| items
 
 peekQueue :: Typeable a => Queues -> Queue a -> Maybe a
-peekQueue queues@Queues{..} Queue{..} =
+peekQueue Queues{..} Queue{..} =
     let q = queuesQueueMap Map.! unQueue
         (maybeHead) = tryRead q
     in maybeHead

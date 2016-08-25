@@ -10,6 +10,7 @@ module DodgerBlue.MyDslExample
   ,writeAndRead
   ,writeFromAChildProcess
   ,readForever
+  ,idleForever
   ,MyDsl
   ,MonadMyDsl
   ,MyDslFunctions
@@ -22,8 +23,6 @@ import           Control.Concurrent.Async
 import           Control.Concurrent.STM
 import           Control.Monad.Free.Church
 import           Control.Monad.State
-import qualified Data.Map.Strict           as Map
-import           Data.Text                 (Text)
 import           Data.Typeable
 import qualified DodgerBlue
 import qualified DodgerBlue.IO             as DslIO
@@ -55,6 +54,7 @@ class Monad m =>
            Typeable a
         => QueueType m a -> m (Maybe a)
     forkChild :: m () -> m ()
+    setPulseStatus :: Bool -> m ()
 
 instance MonadMyDsl IO where
     type QueueType IO = TQueue
@@ -63,6 +63,7 @@ instance MonadMyDsl IO where
     readQueue = DslIO.readQueue
     tryReadQueue = DslIO.tryReadQueue
     forkChild c = (void . async) c
+    setPulseStatus _ = return ()
 
 instance MonadMyDsl (F (DodgerBlue.CustomDsl q MyDslFunctions)) where
     type QueueType (F (DodgerBlue.CustomDsl q MyDslFunctions)) = q
@@ -71,6 +72,7 @@ instance MonadMyDsl (F (DodgerBlue.CustomDsl q MyDslFunctions)) where
     readQueue = DodgerBlue.readQueue
     tryReadQueue = DodgerBlue.tryReadQueue
     forkChild = DodgerBlue.forkChild
+    setPulseStatus = DodgerBlue.setPulseStatus
 
 writeAndTryRead
     :: MonadMyDsl m
@@ -102,6 +104,11 @@ readForever
 readForever = do
     q <- newQueue
     readQueue q
+
+idleForever
+    :: MonadMyDsl m
+    => m ()
+idleForever = forever $ setPulseStatus False
 
 myEvalIO :: MyDsl TQueue a -> IO a
 myEvalIO =
