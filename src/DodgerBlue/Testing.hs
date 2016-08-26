@@ -23,6 +23,7 @@ where
 import           Control.Lens
 import           Data.Maybe (fromJust, catMaybes)
 import           Data.Monoid
+import           Data.List.NonEmpty hiding (head, dropWhile)
 import           Control.Monad.Free.Church
 import qualified Control.Monad.Free                     as Free
 import           Control.Monad.State
@@ -239,10 +240,8 @@ runnablePrograms  t = (fmap catMaybes) . sequenceA $ foldlWithKey' acc [] t
            return $ Nothing
          else return $ Just (node, threadName, programState)
 
-chooseThread :: Maybe (Text,Text) -> [a] -> a
-chooseThread Nothing (x:_) = x
-chooseThread Nothing [] = error "todo chooseThread"
-chooseThread (Just _) _  = error "todo chooseThread"
+chooseThread :: Maybe (Text,Text) -> NonEmpty a -> a
+chooseThread _ (x :| _) = x
 
 mapInsertUniqueKeyWithSuffix :: Text -> a -> Map Text a -> Map Text a
 mapInsertUniqueKeyWithSuffix suffix x m =
@@ -310,8 +309,8 @@ evalMultiDslTest stepCustomCommand testState threadMap =
         runnable <- runnablePrograms _loopStatePrograms
         case runnable of
             [] -> buildResults
-            xs -> do
-              let next = chooseThread _loopStateLastRan xs
+            (x:xs) -> do
+              let next = chooseThread _loopStateLastRan (x:|xs)
               isComplete <- checkIsComplete runnable 
               if isComplete then
                 buildResults

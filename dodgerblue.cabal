@@ -26,6 +26,7 @@ library
                      , containers
                      , QuickCheck
                      , quickcheck-instances
+                     , semigroups
                      , safe
                      , stm
                      , text
