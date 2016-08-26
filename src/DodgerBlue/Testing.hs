@@ -9,7 +9,6 @@
 module DodgerBlue.Testing
   (evalDslTest,
    evalMultiDslTest,
-   HasDslEvalState(..),
    MemQ.Queue,
    MemQ.Queues,
    ThreadGroup(..),
@@ -99,30 +98,21 @@ data LoopState t a = LoopState {
 
 $(makeLenses ''LoopState)
 
-class HasDslEvalState a where
-  evalStateLens :: Lens' a EvalState
+testQueues :: Lens' (LoopState t a) MemQ.Queues
+testQueues = loopStateTestState . evalStateQueues
 
-instance HasDslEvalState EvalState where
-  evalStateLens = id
-
-instance HasDslEvalState (LoopState t a) where
-  evalStateLens = loopStateTestState
-
-testQueues :: HasDslEvalState a => Lens' a MemQ.Queues
-testQueues = evalStateLens . evalStateQueues
-
-runWriteQueueCmd :: (MonadState s m, HasDslEvalState s, Typeable a) => MemQ.Queue a -> a -> m ()
+runWriteQueueCmd :: (MonadState (LoopState t r) m, Typeable a) => MemQ.Queue a -> a -> m ()
 runWriteQueueCmd q x = do
   testQueues %= (\qs -> MemQ.writeToQueue qs q x)
 
-runTryReadQueueCmd :: (MonadState s m, HasDslEvalState s, Typeable a) => MemQ.Queue a -> m (Maybe a)
+runTryReadQueueCmd :: (MonadState (LoopState t r) m, Typeable a) => MemQ.Queue a -> m (Maybe a)
 runTryReadQueueCmd q = do
   qs <- use testQueues
   let (x, qs') = MemQ.tryReadFromQueue qs q
   testQueues .= qs'
   return x
 
-runNewQueueCmd :: (MonadState (LoopState t a) m, Typeable b) => m (MemQ.Queue b)
+runNewQueueCmd :: (MonadState (LoopState t r) m, Typeable a) => m (MemQ.Queue a)
 runNewQueueCmd = do
   qs <- use testQueues
   let (x, qs') = MemQ.newQueue qs
