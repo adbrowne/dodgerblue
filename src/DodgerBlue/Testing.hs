@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module DodgerBlue.Testing
   (evalDslTest,
@@ -223,7 +224,7 @@ isProgramBlocked (Free.Free (DslBase (ReadQueue' q _n))) = do
   return $ MemQ.isEmptyQueue qs q
 isProgramBlocked _ = return False
 
-runnablePrograms :: (MonadState (LoopState t a) m, Monad m, Functor t) => ExecutionTree (ProgramState t a) -> m [(Text,Text,ProgramState t a)]
+runnablePrograms :: (MonadState (LoopState t a) m, Monad m, Functor t) => ExecutionTree (ProgramState t a) -> m [((Text,Text),ProgramState t a)]
 runnablePrograms  t = (fmap catMaybes) . sequenceA $ foldlWithKey' acc [] t
  where acc xs node threadName programState =
          (justIfRunnable node threadName programState):xs
@@ -231,17 +232,28 @@ runnablePrograms  t = (fmap catMaybes) . sequenceA $ foldlWithKey' acc [] t
          isBlocked <- isProgramBlocked p
          if isBlocked then
            return Nothing
-         else return $ Just (node, threadName, programState)
+         else return $ Just ((node, threadName), programState)
        justIfRunnable _ _ (ExternalProgramComplete _) =
          return Nothing
        justIfRunnable node threadName programState@(InternalProgramRunning (p,_idleCount)) = do
          isBlocked <- isProgramBlocked p
          if isBlocked then
            return $ Nothing
-         else return $ Just (node, threadName, programState)
+         else return $ Just ((node, threadName), programState)
 
-chooseThread :: Maybe (Text,Text) -> NonEmpty a -> a
-chooseThread _ (x :| _) = x
+class TestEvaluator m where
+  chooseNextThread :: Maybe (Text,Text) -> NonEmpty ((Text,Text), a) -> m ((Text,Text), a)
+
+instance TestEvaluator Identity where
+  chooseNextThread Nothing ((k,x) :| _) = return (k,x)
+  chooseNextThread (Just _) ((k,x) :| _) = return (k,x)
+
+instance TestEvaluator IO where
+  chooseNextThread Nothing ((k,x) :| _) = return (k,x)
+  chooseNextThread (Just _) ((k,x) :| _) = return (k,x)
+
+instance (TestEvaluator m, Monad m) => TestEvaluator (StateT s m) where
+  chooseNextThread a b = lift $ chooseNextThread a b
 
 mapInsertUniqueKeyWithSuffix :: Text -> a -> Map Text a -> Map Text a
 mapInsertUniqueKeyWithSuffix suffix x m =
@@ -272,11 +284,11 @@ resetIdleCount = setIdleCount Nothing
 setAllIdle :: (MonadState (LoopState t r) m) => m ()
 setAllIdle = loopStatePrograms %= fmap resetIdleCount
 
-checkIsComplete :: (MonadState (LoopState t r) m) => [(Text,Text,ProgramState t r)] -> m Bool
+checkIsComplete :: (MonadState (LoopState t r) m) => [(( Text,Text ),ProgramState t r)] -> m Bool
 checkIsComplete runnableThreads  =
   let
-    allIdle = getAll $ foldMap (\(_,_,ps) -> All (isProgramStateIdle ps)) runnableThreads
-    anyActive = getAny $ foldMap (\(_,_,ps) -> Any (isProgramStateActive ps)) runnableThreads
+    allIdle = getAll $ foldMap (\(_,ps) -> All (isProgramStateIdle ps)) runnableThreads
+    anyActive = getAny $ foldMap (\(_,ps) -> Any (isProgramStateActive ps)) runnableThreads
     setCooldownMode x = loopStateInIdleCoolDown .= x
   in do
     LoopState{..} <- get
@@ -295,7 +307,7 @@ checkIsComplete runnableThreads  =
         return False
 
 evalMultiDslTest ::
-  (Monad m, Functor t) =>
+  (Monad m, Functor t, TestEvaluator m) =>
   TestCustomCommandStep t m ->
   EvalState ->
   ExecutionTree (TestProgram t a) ->
@@ -310,14 +322,14 @@ evalMultiDslTest stepCustomCommand testState threadMap =
         case runnable of
             [] -> buildResults
             (x:xs) -> do
-              let next = chooseThread _loopStateLastRan (x:|xs)
-              isComplete <- checkIsComplete runnable 
+              next <- chooseNextThread _loopStateLastRan (x:|xs)
+              isComplete <- checkIsComplete runnable
               if isComplete then
                 buildResults
               else do
                 progressThread next
                 go
-    progressThread (node,threadName,p) = do
+    progressThread ((node,threadName),p) = do
         (currentThreadUpdate,newThreadUpdate) <- stepEvalThread (\x -> lift $ stepCustomCommand x) p
         let updateCurrentThread =
                 updateWithKeyExecutionTree
@@ -334,7 +346,7 @@ evalMultiDslTest stepCustomCommand testState threadMap =
             t
 
 evalDslTest ::
-  (Monad m, Functor t) =>
+  (Monad m, Functor t, TestEvaluator m) =>
   TestCustomCommandStep t m ->
   F (CustomDsl MemQ.Queue t) a ->
   m a
