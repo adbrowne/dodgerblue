@@ -90,8 +90,8 @@ emptyEvalState = EvalState {
 
 $(makeLenses ''EvalState)
 
-data LoopState t a = LoopState {
-  _loopStatePrograms :: ExecutionTree (ProgramState t a),
+data LoopState t r = LoopState {
+  _loopStatePrograms :: ExecutionTree (ProgramState t r),
   _loopStateTestState :: EvalState,
   _loopStateLastRan :: Maybe (Text,Text),
   _loopStateInIdleCoolDown :: Bool }
@@ -149,7 +149,7 @@ data StepResult t a =
 standardContinueStep :: TestProgramFree t a -> StepResult t a
 standardContinueStep n = StepResultContinue (n, Nothing)
 
-stepProgram :: (MonadState (LoopState t a) m, Functor t) => TestCustomCommandStep t m -> TestProgramFree t b -> m (StepResult t b)
+stepProgram :: (MonadState (LoopState t r) m, Functor t) => TestCustomCommandStep t m -> TestProgramFree t a -> m (StepResult t a)
 stepProgram _ (Free.Pure a) = return . StepResultComplete $ a
 stepProgram _ (Free.Free (DslBase (NewQueue' n))) = do
   q <- runNewQueueCmd
@@ -170,7 +170,7 @@ stepProgram _ (Free.Free (DslBase _a)) = error $ "todo DslBase _"
 stepProgram stepCustomCommand (Free.Free (DslCustom cmd)) =
   stepCustomCommand cmd >>= return . standardContinueStep
 
-buildLoopState :: Functor t => ExecutionTree (TestProgram t a) -> EvalState -> LoopState t a
+buildLoopState :: Functor t => ExecutionTree (TestProgram t r) -> EvalState -> LoopState t r
 buildLoopState threadMap testState =
     LoopState {
       _loopStatePrograms = fmap (mkExternalProgramRunning . fromF) threadMap,
@@ -185,10 +185,10 @@ updateIdleCount (Just False) Nothing = Just 1
 updateIdleCount (Just False) (Just x) = Just $ x + 1
 
 stepEvalThread ::
-  (MonadState (LoopState t a) m, Functor t) =>
+  (MonadState (LoopState t r) m, Functor t) =>
   TestCustomCommandStep t m ->
-  ProgramState t a ->
-  m (Maybe (ProgramState t a), Maybe (ProgramState t a))
+  ProgramState t r ->
+  m (Maybe (ProgramState t r), Maybe (ProgramState t r))
 stepEvalThread stepCustomCommand (InternalProgramRunning (p,idleCount)) = do
   result <- stepProgram stepCustomCommand p
   case result of StepResultComplete () -> return $ (Nothing, Nothing)
@@ -271,10 +271,10 @@ setIdleCount _ (ExternalProgramComplete a) = ExternalProgramComplete a
 resetIdleCount :: ProgramState t a -> ProgramState t a
 resetIdleCount = setIdleCount Nothing
 
-setAllIdle :: (MonadState (LoopState t a) m) => m ()
+setAllIdle :: (MonadState (LoopState t r) m) => m ()
 setAllIdle = loopStatePrograms %= fmap resetIdleCount
 
-checkIsComplete :: (MonadState (LoopState t a) m) => [(Text,Text,ProgramState t a)] -> m Bool
+checkIsComplete :: (MonadState (LoopState t r) m) => [(Text,Text,ProgramState t r)] -> m Bool
 checkIsComplete runnableThreads  =
   let
     allIdle = getAll $ foldMap (\(_,_,ps) -> All (isProgramStateIdle ps)) runnableThreads
