@@ -166,8 +166,6 @@ stepProgram _ (Free.Free (DslBase (ForkChild' childProgram n))) =
   return (StepResultFork n (fromF childProgram))
 stepProgram _ (Free.Free (DslBase (SetPulseStatus' active n))) =
   return (StepResultContinue (n, Just active))
-stepProgram _ (Free.Free (DslBase (Wait' _ n))) =
-  return (StepResultContinue (n, Nothing))
 stepProgram stepCustomCommand (Free.Free (DslCustom cmd)) =
   stepCustomCommand cmd >>= return . standardContinueStep
 

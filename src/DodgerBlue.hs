@@ -7,7 +7,6 @@ module DodgerBlue
   ,writeQueue
   ,tryReadQueue
   ,readQueue
-  ,wait
   ,setPulseStatus
   ,CustomDsl)
   where
@@ -41,11 +40,6 @@ readQueue
     :: (Functor d, MonadFree (CustomDsl q d) m, Typeable a)
     => q a -> m a
 readQueue queue = liftF . DslBase $ ReadQueue' queue id
-
-wait
-    :: (Functor d, MonadFree (CustomDsl q d) m)
-    => Int -> m ()
-wait seconds = liftF . DslBase $ Wait' seconds ()
 
 setPulseStatus
     :: (Functor d, MonadFree (CustomDsl q d) m)

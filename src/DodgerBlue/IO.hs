@@ -8,7 +8,6 @@ module DodgerBlue.IO
 where
 
 import           DodgerBlue.Types
-import           Control.Concurrent        (threadDelay)
 import           Control.Concurrent.Async
 import           Control.Concurrent.STM
 import           Control.Monad
@@ -26,9 +25,6 @@ tryReadQueue q = (liftIO . atomically) (tryReadTQueue q)
 
 readQueue :: (MonadIO m) => TQueue a -> m a
 readQueue q = (liftIO . atomically) (readTQueue q)
-
-delayMilliseconds :: (MonadIO m) => Int -> m ()
-delayMilliseconds milliseconds = (liftIO $ threadDelay (milliseconds * 1000))
 
 evalDslIO :: (MonadIO m) =>
   (m () -> IO ()) ->
@@ -49,8 +45,6 @@ evalDslIO runChild stepCustomCommand p = iterM stepProgram p
       let runner = evalDslIO runChild stepCustomCommand childProgram
       void . liftIO $ async (runChild runner)
       n
-    stepProgram (DslBase (Wait' milliseconds n)) =
-      delayMilliseconds milliseconds >> n
     stepProgram (DslBase (SetPulseStatus' _status n)) = n -- ignore for now
     stepProgram (DslCustom customCmd) =
       stepCustomCommand customCmd

@@ -17,7 +17,6 @@ data ConcurrentDslCmd q d next where
   TryReadQueue' :: Typeable a => q a ->  (Maybe a -> next) -> ConcurrentDslCmd q d next
   ReadQueue' :: Typeable a => q a ->  (a -> next) -> ConcurrentDslCmd q d next
   ForkChild' :: F (CustomDsl q d) () -> next -> ConcurrentDslCmd q d next
-  Wait' :: Int -> next -> ConcurrentDslCmd q d next
   SetPulseStatus' :: Bool -> next -> ConcurrentDslCmd q d next
 
 deriving instance Functor (ConcurrentDslCmd q d)
