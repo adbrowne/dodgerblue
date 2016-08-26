@@ -252,6 +252,9 @@ instance TestEvaluator IO where
   chooseNextThread Nothing ((k,x) :| _) = return (k,x)
   chooseNextThread (Just _) ((k,x) :| _) = return (k,x)
 
+instance TestEvaluator Gen where
+  chooseNextThread _ (x :| xs) = Test.QuickCheck.elements (x:xs)
+
 instance (TestEvaluator m, Monad m) => TestEvaluator (StateT s m) where
   chooseNextThread a b = lift $ chooseNextThread a b
 
@@ -322,12 +325,13 @@ evalMultiDslTest stepCustomCommand testState threadMap =
         case runnable of
             [] -> buildResults
             (x:xs) -> do
-              next <- chooseNextThread _loopStateLastRan (x:|xs)
+              nextProgram@(nextProgramKeys, _) <- chooseNextThread _loopStateLastRan (x:|xs)
+              loopStateLastRan .= Just nextProgramKeys
               isComplete <- checkIsComplete runnable
               if isComplete then
                 buildResults
               else do
-                progressThread next
+                progressThread nextProgram
                 go
     progressThread ((node,threadName),p) = do
         (currentThreadUpdate,newThreadUpdate) <- stepEvalThread (\x -> lift $ stepCustomCommand x) p

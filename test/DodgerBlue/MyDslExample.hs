@@ -16,7 +16,8 @@ module DodgerBlue.MyDslExample
   ,MyDslFunctions
   ,myEvalIO
   ,myEvalTest
-  ,myEvalMultiDslTest)
+  ,myEvalMultiDslTest
+  ,myEvalMultiDslTestGen)
   where
 
 import           Control.Concurrent.Async
@@ -27,6 +28,7 @@ import           Data.Typeable
 import qualified DodgerBlue
 import qualified DodgerBlue.IO             as DslIO
 import qualified DodgerBlue.Testing
+import           Test.QuickCheck
 
 data MyDslFunctions next =
     MyDslFunctions next
@@ -126,6 +128,16 @@ myEvalMultiDslTest programs =
                 return n)
           DodgerBlue.Testing.emptyEvalState
           programs)
+
+myEvalMultiDslTestGen ::
+  DodgerBlue.Testing.ExecutionTree (DodgerBlue.Testing.TestProgram MyDslFunctions a)
+  -> Gen (DodgerBlue.Testing.ExecutionTree (DodgerBlue.Testing.ThreadResult a))
+myEvalMultiDslTestGen programs =
+    DodgerBlue.Testing.evalMultiDslTest
+          (\(MyDslFunctions n) ->
+                return n)
+          DodgerBlue.Testing.emptyEvalState
+          programs
 
 myEvalTest :: MyDsl DodgerBlue.Testing.Queue a -> IO a
 myEvalTest p = do

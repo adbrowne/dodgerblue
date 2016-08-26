@@ -64,6 +64,13 @@ prop_allProgramsHaveAnOutput =
         programInputAndOutputTheSame ps = programInput ps === programOutput ps
     in forAll (resize 10 genProgramSet) programInputAndOutputTheSame
 
+prop_CanRunTestsInsideGenMonad :: Property
+prop_CanRunTestsInsideGenMonad =
+    let programInput = ExecutionTree $ Map.singleton "MyNode" (Map.singleton "MyThread" writeAndRead)
+        expected = ExecutionTree $ Map.singleton "MyNode" (Map.singleton "MyThread" (ThreadResult (1 :: Int)))
+        resultIsOne result = result === expected
+    in forAll (myEvalMultiDslTestGen programInput) resultIsOne
+
 main :: IO ()
 main = do
     unitTestSpecsIO <- testSpec "Unit tests - IO" (unitTestSpecs myEvalIO)
@@ -79,4 +86,7 @@ main = do
             , unitTestTestInterpreter 
             , testProperty 
                   "All programs have an output"
-                  prop_allProgramsHaveAnOutput] 
+                  prop_allProgramsHaveAnOutput
+            , testProperty 
+                  "Can run tests inside Gen monad"
+                  prop_CanRunTestsInsideGenMonad] 
