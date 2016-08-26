@@ -17,6 +17,7 @@ module DodgerBlue.Testing
    TestProgram,
    ExecutionTree(..),
    ThreadResultGroup(..),
+   loopStateLastRan,
    emptyEvalState)
 where
 
@@ -91,10 +92,10 @@ emptyEvalState = EvalState {
 $(makeLenses ''EvalState)
 
 data LoopState t a = LoopState {
-  loopStatePrograms :: ExecutionTree (ProgramState t a),
-  loopStateTestState :: EvalState,
-  loopStateLastRan :: Maybe (Text,Text),
-  loopStateInIdleCoolDown :: Bool }
+  _loopStatePrograms :: ExecutionTree (ProgramState t a),
+  _loopStateTestState :: EvalState,
+  _loopStateLastRan :: Maybe (Text,Text),
+  _loopStateInIdleCoolDown :: Bool }
 
 $(makeLenses ''LoopState)
 
@@ -105,7 +106,7 @@ instance HasDslEvalState EvalState where
   evalStateLens = id
 
 instance HasDslEvalState (LoopState t a) where
-  evalStateLens f (loopState@LoopState{..}) = (\a' -> loopState { loopStateTestState = a' }) <$> f loopStateTestState
+  evalStateLens = loopStateTestState
 
 testQueues :: HasDslEvalState a => Lens' a MemQ.Queues
 testQueues = evalStateLens . evalStateQueues
@@ -182,10 +183,10 @@ stepProgram stepCustomCommand (Free.Free (DslCustom cmd)) =
 buildLoopState :: Functor t => ExecutionTree (TestProgram t a) -> EvalState -> LoopState t a
 buildLoopState threadMap testState =
     LoopState {
-      loopStatePrograms = fmap (mkExternalProgramRunning . fromF) threadMap,
-      loopStateTestState = testState,
-      loopStateLastRan = mempty,
-      loopStateInIdleCoolDown = False }
+      _loopStatePrograms = fmap (mkExternalProgramRunning . fromF) threadMap,
+      _loopStateTestState = testState,
+      _loopStateLastRan = mempty,
+      _loopStateInIdleCoolDown = False }
 
 updateIdleCount :: Maybe Bool -> Maybe Int -> Maybe Int
 updateIdleCount Nothing x = x
@@ -213,7 +214,7 @@ stepEvalThread _ (ExternalProgramComplete a) = return (Just (ExternalProgramComp
 buildResults :: MonadState (LoopState t a) m => m (ExecutionTree (ThreadResult a))
 buildResults  = do
   LoopState {..} <- get
-  return $ mapMaybeExecutionTree toResult loopStatePrograms
+  return $ mapMaybeExecutionTree toResult _loopStatePrograms
   where
     toResult (InternalProgramRunning _) = Nothing
     toResult (ExternalProgramComplete a) = Just $ ThreadResult a
@@ -281,17 +282,17 @@ resetIdleCount :: ProgramState t a -> ProgramState t a
 resetIdleCount = setIdleCount Nothing
 
 setAllIdle :: (MonadState (LoopState t a) m) => m ()
-setAllIdle = modify (\s -> s { loopStatePrograms = fmap resetIdleCount (loopStatePrograms s) })
+setAllIdle = loopStatePrograms %= fmap resetIdleCount
 
 checkIsComplete :: (MonadState (LoopState t a) m) => [(Text,Text,ProgramState t a)] -> m Bool
 checkIsComplete runnableThreads  =
   let
     allIdle = getAll $ foldMap (\(_,_,ps) -> All (isProgramStateIdle ps)) runnableThreads
     anyActive = getAny $ foldMap (\(_,_,ps) -> Any (isProgramStateActive ps)) runnableThreads
-    setCooldownMode x = modify (\s -> s { loopStateInIdleCoolDown = x })
+    setCooldownMode x = loopStateInIdleCoolDown .= x
   in do
     LoopState{..} <- get
-    if loopStateInIdleCoolDown then
+    if _loopStateInIdleCoolDown then
       if anyActive then do
         setCooldownMode False
         return False
@@ -317,11 +318,11 @@ evalMultiDslTest stepCustomCommand testState threadMap =
   where
     go  = do
         LoopState {..} <- LazyState.get
-        runnable <- runnablePrograms loopStatePrograms
+        runnable <- runnablePrograms _loopStatePrograms
         case runnable of
             [] -> buildResults
             xs -> do
-              let next = chooseThread loopStateLastRan xs
+              let next = chooseThread _loopStateLastRan xs
               isComplete <- checkIsComplete runnable 
               if isComplete then
                 buildResults
@@ -335,15 +336,7 @@ evalMultiDslTest stepCustomCommand testState threadMap =
                     (const currentThreadUpdate)
                     node
                     threadName
-        loopState@LoopState{..} <- LazyState.get
-        put $ loopState
-                { loopStatePrograms = ((addSubThread
-                                            node
-                                            threadName
-                                            newThreadUpdate) .
-                                       updateCurrentThread)
-                      loopStatePrograms
-                }
+        loopStatePrograms %= ((addSubThread node threadName newThreadUpdate) . updateCurrentThread)
     addSubThread _ _ Nothing tree = tree
     addSubThread node threadName (Just newProgramState) (ExecutionTree t) =
         ExecutionTree $
