@@ -21,8 +21,8 @@ module DodgerBlue.MyDslExample
 
 import           Control.Concurrent.Async
 import           Control.Concurrent.STM
+import           Control.Monad.Identity
 import           Control.Monad.Free.Church
-import           Control.Monad.State
 import           Data.Typeable
 import qualified DodgerBlue
 import qualified DodgerBlue.IO             as DslIO
@@ -121,19 +121,12 @@ myEvalMultiDslTest ::
   DodgerBlue.Testing.ExecutionTree (DodgerBlue.Testing.TestProgram MyDslFunctions a)
   -> DodgerBlue.Testing.ExecutionTree (DodgerBlue.Testing.ThreadResult a)
 myEvalMultiDslTest programs =
-    evalState
-        (DodgerBlue.Testing.evalMultiDslTest
-             (\(MyDslFunctions n) ->
-                   return n)
-             programs)
-        DodgerBlue.Testing.emptyEvalState
+    runIdentity $ (DodgerBlue.Testing.evalMultiDslTest
+          (\(MyDslFunctions n) ->
+                return n)
+          DodgerBlue.Testing.emptyEvalState
+          programs)
 
 myEvalTest :: MyDsl DodgerBlue.Testing.Queue a -> IO a
-myEvalTest p =
-    return $
-    evalState
-        (DodgerBlue.Testing.evalDslTest
-             (\(MyDslFunctions n) ->
-                   return n)
-             p)
-        DodgerBlue.Testing.emptyEvalState
+myEvalTest p = do
+  DodgerBlue.Testing.evalDslTest (\(MyDslFunctions n) -> return n) p

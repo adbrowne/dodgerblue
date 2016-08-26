@@ -17,6 +17,7 @@ import           Data.Dynamic
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import           Data.Maybe      (isJust)
+import           Safe            (fromJustNote)
 import           Data.Sequence   (ViewR (..), (<|))
 import qualified Data.Sequence   as Seq
 
@@ -56,7 +57,7 @@ writeToQueue
     :: Typeable a
     => Queues -> Queue a -> a -> Queues
 writeToQueue queues@Queues{..} Queue{..} item =
-    let q = queuesQueueMap Map.! unQueue
+    let q = fromJustNote "writeToQueue: could not find queue" $ Map.lookup unQueue queuesQueueMap
         updatedQueue = addItem q
     in queues
        { queuesQueueMap = Map.insert unQueue (Just updatedQueue) queuesQueueMap
@@ -73,7 +74,7 @@ writeToQueue queues@Queues{..} Queue{..} item =
 
 peekQueue :: Typeable a => Queues -> Queue a -> Maybe a
 peekQueue Queues{..} Queue{..} =
-    let q = queuesQueueMap Map.! unQueue
+    let q = fromJustNote "peekQueue: could not find queue" $ Map.lookup unQueue queuesQueueMap
         (maybeHead) = tryRead q
     in maybeHead
   where
@@ -100,7 +101,7 @@ tryReadFromQueue
     :: Typeable a
     => Queues -> Queue a -> (Maybe a, Queues)
 tryReadFromQueue queues@Queues{..} Queue{..} =
-    let q = queuesQueueMap Map.! unQueue
+    let q = fromJustNote "tryReadFromQueue: could not find queue" $ Map.lookup unQueue queuesQueueMap
         (maybeItem,updatedQueue) = tryRead q
     in ( maybeItem
        , queues

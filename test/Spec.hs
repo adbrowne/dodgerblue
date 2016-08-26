@@ -14,8 +14,8 @@ import           Test.Tasty.Hspec
 import           Test.Tasty.QuickCheck
 
 unitTestSpecs
-    :: MonadMyDsl m
-    => (forall a. m a -> IO a) -> SpecWith ()
+    :: (MonadMyDsl m)
+    => (forall a. Show a => m a -> IO a) -> SpecWith ()
 unitTestSpecs dslRunner = do
     describe "all evaluators unit tests" $
         do it "can write and try read from queue" $

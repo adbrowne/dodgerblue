@@ -26,6 +26,7 @@ import           Data.Monoid
 import           Control.Monad.Free.Church
 import qualified Control.Monad.Free                     as Free
 import           Control.Monad.State
+import qualified Control.Monad.Trans.State.Lazy as LazyState
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Data.Map.Strict (Map)
@@ -80,13 +81,31 @@ updateWithKeyExecutionTree f nodeName threadName (ExecutionTree t) =
 getExecutionTreeEntry :: Text -> Text -> ExecutionTree a -> Maybe a
 getExecutionTreeEntry node threadName ExecutionTree{..} = do
   threads <- Map.lookup node unExecutionTree
-  Map.lookup threadName threads
+  r <- Map.lookup threadName threads
+  return r
 
 emptyEvalState :: EvalState
 emptyEvalState = EvalState {
   _evalStateQueues = MemQ.emptyQueues }
 
 $(makeLenses ''EvalState)
+
+data LoopState t a = LoopState {
+  loopStatePrograms :: ExecutionTree (ProgramState t a),
+  loopStateTestState :: EvalState,
+  loopStateLastRan :: Maybe (Text,Text),
+  loopStateInIdleCoolDown :: Bool }
+
+$(makeLenses ''LoopState)
+
+class HasDslEvalState a where
+  evalStateLens :: Lens' a EvalState
+
+instance HasDslEvalState EvalState where
+  evalStateLens = id
+
+instance HasDslEvalState (LoopState t a) where
+  evalStateLens f (loopState@LoopState{..}) = (\a' -> loopState { loopStateTestState = a' }) <$> f loopStateTestState
 
 testQueues :: HasDslEvalState a => Lens' a MemQ.Queues
 testQueues = evalStateLens . evalStateQueues
@@ -102,18 +121,12 @@ runTryReadQueueCmd q = do
   testQueues .= qs'
   return x
 
-runNewQueueCmd :: (MonadState s m, HasDslEvalState s, Typeable a) => m (MemQ.Queue a)
+runNewQueueCmd :: (MonadState (LoopState t a) m, Typeable b) => m (MemQ.Queue b)
 runNewQueueCmd = do
   qs <- use testQueues
   let (x, qs') = MemQ.newQueue qs
   testQueues .= qs'
   return x
-
-class HasDslEvalState a where
-  evalStateLens :: Lens' a EvalState
-
-instance HasDslEvalState EvalState where
-  evalStateLens = id
 
 type TestCustomCommandStep t m = forall a. t (TestProgramFree t a) -> m (TestProgramFree t a)
 
@@ -137,11 +150,6 @@ data ThreadResultGroup a = ThreadResultGroup {
   threadResultGroupPrograms :: Map Text (ThreadResult a) }
   deriving (Eq,Show)
 
-data LoopState t a = LoopState {
-  loopStatePrograms :: ExecutionTree (ProgramState t a),
-  loopStateLastRan :: Maybe (Text,Text),
-  loopStateInIdleCoolDown :: Bool }
-
 data StepResult t a =
   StepResultComplete a
   | StepResultContinue (TestProgramFree t a, Maybe Bool)
@@ -150,7 +158,7 @@ data StepResult t a =
 standardContinueStep :: TestProgramFree t a -> StepResult t a
 standardContinueStep n = StepResultContinue (n, Nothing)
 
-stepProgram :: (MonadState s m, HasDslEvalState s, Monad m, Functor t) => TestCustomCommandStep t m -> TestProgramFree t a -> m (StepResult t a)
+stepProgram :: (MonadState (LoopState t a) m, Functor t) => TestCustomCommandStep t m -> TestProgramFree t b -> m (StepResult t b)
 stepProgram _ (Free.Pure a) = return . StepResultComplete $ a
 stepProgram _ (Free.Free (DslBase (NewQueue' n))) = do
   q <- runNewQueueCmd
@@ -171,10 +179,11 @@ stepProgram _ (Free.Free (DslBase _a)) = error $ "todo DslBase _"
 stepProgram stepCustomCommand (Free.Free (DslCustom cmd)) =
   stepCustomCommand cmd >>= return . standardContinueStep
 
-buildLoopState :: Functor t => ExecutionTree (TestProgram t a) -> LoopState t a
-buildLoopState threadMap =
+buildLoopState :: Functor t => ExecutionTree (TestProgram t a) -> EvalState -> LoopState t a
+buildLoopState threadMap testState =
     LoopState {
       loopStatePrograms = fmap (mkExternalProgramRunning . fromF) threadMap,
+      loopStateTestState = testState,
       loopStateLastRan = mempty,
       loopStateInIdleCoolDown = False }
 
@@ -185,7 +194,7 @@ updateIdleCount (Just False) Nothing = Just 1
 updateIdleCount (Just False) (Just x) = Just $ x + 1
 
 stepEvalThread ::
-  (MonadState s m, HasDslEvalState s, Functor t) =>
+  (MonadState (LoopState t a) m, Functor t) =>
   TestCustomCommandStep t m ->
   ProgramState t a ->
   m (Maybe (ProgramState t a), Maybe (ProgramState t a))
@@ -201,9 +210,10 @@ stepEvalThread stepCustomCommand (ExternalProgramRunning (p,idleCount)) = do
                  StepResultFork n newProgram -> return $ (Just (ExternalProgramRunning (n,idleCount)), Just (mkInternalProgramRunning newProgram))
 stepEvalThread _ (ExternalProgramComplete a) = return (Just (ExternalProgramComplete a), Nothing)
 
-buildResults :: LoopState t a -> ExecutionTree (ThreadResult a)
-buildResults LoopState {..} =
-  mapMaybeExecutionTree toResult loopStatePrograms
+buildResults :: MonadState (LoopState t a) m => m (ExecutionTree (ThreadResult a))
+buildResults  = do
+  LoopState {..} <- get
+  return $ mapMaybeExecutionTree toResult loopStatePrograms
   where
     toResult (InternalProgramRunning _) = Nothing
     toResult (ExternalProgramComplete a) = Just $ ThreadResult a
@@ -216,13 +226,13 @@ buildResults LoopState {..} =
 foldlWithKey' :: (s -> Text -> Text -> a -> s) -> s -> ExecutionTree a -> s
 foldlWithKey' acc z (ExecutionTree t) = Map.foldlWithKey' (\s nodeName -> Map.foldlWithKey' (\s1 threadName v -> acc s1 nodeName threadName v) s) z t
 
-isProgramBlocked :: (MonadState s m, HasDslEvalState s, Monad m, Functor t) => TestProgramFree t a -> m (Bool)
+isProgramBlocked :: (MonadState (LoopState t a) m, Functor t) => TestProgramFree t b -> m (Bool)
 isProgramBlocked (Free.Free (DslBase (ReadQueue' q _n))) = do
   qs <- use testQueues
   return $ MemQ.isEmptyQueue qs q
 isProgramBlocked _ = return False
 
-runnablePrograms :: (MonadState s m, HasDslEvalState s, Monad m, Functor t) => ExecutionTree (ProgramState t a) -> m [(Text,Text,ProgramState t a)]
+runnablePrograms :: (MonadState (LoopState t a) m, Monad m, Functor t) => ExecutionTree (ProgramState t a) -> m [(Text,Text,ProgramState t a)]
 runnablePrograms  t = (fmap catMaybes) . sequenceA $ foldlWithKey' acc [] t
  where acc xs node threadName programState =
          (justIfRunnable node threadName programState):xs
@@ -270,62 +280,63 @@ setIdleCount _ (ExternalProgramComplete a) = ExternalProgramComplete a
 resetIdleCount :: ProgramState t a -> ProgramState t a
 resetIdleCount = setIdleCount Nothing
 
-setAllIdle :: LoopState t a -> LoopState t a
-setAllIdle s@LoopState{..} = s { loopStatePrograms = fmap resetIdleCount loopStatePrograms }
+setAllIdle :: (MonadState (LoopState t a) m) => m ()
+setAllIdle = modify (\s -> s { loopStatePrograms = fmap resetIdleCount (loopStatePrograms s) })
 
-checkIsComplete :: [(Text,Text,ProgramState t a)] -> LoopState t a -> (Bool, LoopState t a)
-checkIsComplete runnableThreads loopState@LoopState{..} =
+checkIsComplete :: (MonadState (LoopState t a) m) => [(Text,Text,ProgramState t a)] -> m Bool
+checkIsComplete runnableThreads  =
   let
     allIdle = getAll $ foldMap (\(_,_,ps) -> All (isProgramStateIdle ps)) runnableThreads
     anyActive = getAny $ foldMap (\(_,_,ps) -> Any (isProgramStateActive ps)) runnableThreads
-    setCooldownMode x s = s { loopStateInIdleCoolDown = x }
-  in
+    setCooldownMode x = modify (\s -> s { loopStateInIdleCoolDown = x })
+  in do
+    LoopState{..} <- get
     if loopStateInIdleCoolDown then
-      if anyActive then
-        (False, setCooldownMode False $ loopState)
+      if anyActive then do
+        setCooldownMode False
+        return False
       else
-        if allIdle then
-          (True, loopState)
-        else
-          (False, loopState)
+        return allIdle
     else
-      if allIdle then
-        (False, setAllIdle . setCooldownMode True $ loopState)
+      if allIdle then do
+        setCooldownMode True
+        setAllIdle
+        return False
       else
-        (False, loopState)
+        return False
 
 evalMultiDslTest ::
-  (MonadState s m, HasDslEvalState s, Functor t) =>
+  (Monad m, Functor t) =>
   TestCustomCommandStep t m ->
+  EvalState ->
   ExecutionTree (TestProgram t a) ->
   m (ExecutionTree (ThreadResult a))
-evalMultiDslTest stepCustomCommand threadMap =
-    let loopState = buildLoopState threadMap
-    in go loopState
+evalMultiDslTest stepCustomCommand testState threadMap =
+    let loopState = buildLoopState threadMap testState
+    in evalStateT go loopState
   where
-    go loopState@LoopState{..} = do
+    go  = do
+        LoopState {..} <- LazyState.get
         runnable <- runnablePrograms loopStatePrograms
         case runnable of
-            [] -> return $ buildResults loopState
-            xs ->
-                let
-                  (isComplete, loopState') = checkIsComplete runnable loopState
-                  next = chooseThread loopStateLastRan xs
-                in
-                  if isComplete then
-                    return $ buildResults loopState'
-                  else
-                    progressThread loopState' next
-    progressThread loopState@LoopState{..} (node,threadName,p) = do
-        (currentThreadUpdate,newThreadUpdate) <-
-            stepEvalThread stepCustomCommand p
+            [] -> buildResults
+            xs -> do
+              let next = chooseThread loopStateLastRan xs
+              isComplete <- checkIsComplete runnable 
+              if isComplete then
+                buildResults
+              else do
+                progressThread next
+                go
+    progressThread (node,threadName,p) = do
+        (currentThreadUpdate,newThreadUpdate) <- stepEvalThread (\x -> lift $ stepCustomCommand x) p
         let updateCurrentThread =
                 updateWithKeyExecutionTree
                     (const currentThreadUpdate)
                     node
                     threadName
-        let loopState' =
-                loopState
+        loopState@LoopState{..} <- LazyState.get
+        put $ loopState
                 { loopStatePrograms = ((addSubThread
                                             node
                                             threadName
@@ -333,7 +344,6 @@ evalMultiDslTest stepCustomCommand threadMap =
                                        updateCurrentThread)
                       loopStatePrograms
                 }
-        go loopState'
     addSubThread _ _ Nothing tree = tree
     addSubThread node threadName (Just newProgramState) (ExecutionTree t) =
         ExecutionTree $
@@ -343,7 +353,7 @@ evalMultiDslTest stepCustomCommand threadMap =
             t
 
 evalDslTest ::
-  (MonadState s m, HasDslEvalState s, Functor t) =>
+  (Monad m, Functor t) =>
   TestCustomCommandStep t m ->
   F (CustomDsl MemQ.Queue t) a ->
   m a
@@ -351,6 +361,5 @@ evalDslTest stepCustomCommand p =
   let
     mainThreadKey = "MainThread"
     inputMap = ExecutionTree $ Map.singleton mainThreadKey (Map.singleton mainThreadKey p)
-    resultSet = evalMultiDslTest stepCustomCommand inputMap
-  in
-    fromThreadResult . fromJust . (getExecutionTreeEntry mainThreadKey mainThreadKey) <$> resultSet
+    resultSet = evalMultiDslTest stepCustomCommand emptyEvalState inputMap
+  in fromThreadResult . fromJust . (getExecutionTreeEntry mainThreadKey mainThreadKey) <$> resultSet
