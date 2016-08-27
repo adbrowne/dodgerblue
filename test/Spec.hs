@@ -84,7 +84,7 @@ parentThreadShouldKillChild =
       _ <- runResourceT (forkChildAndExit q parentWaitTime)
       delay 300
       queueLength <- length <$> atomically (drainQueue q)
-      queueLength `shouldSatisfy` (\x -> x > 1 && x < parentWaitTime + 50)
+      queueLength `shouldSatisfy` (\x -> x > 0 && x < parentWaitTime + 50)
 
 childThreadShouldContinueRunningWhileParentThreadIs :: SpecWith ()
 childThreadShouldContinueRunningWhileParentThreadIs =
