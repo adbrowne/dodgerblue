@@ -121,7 +121,7 @@ runNewQueueCmd = do
   testQueues .= qs'
   return x
 
-type TestCustomCommandStep t m = forall a. t (TestProgramFree t a) -> m (TestProgramFree t a)
+type TestCustomCommandStep t m = forall a. t a -> m a
 
 data ThreadGroup t a = ThreadGroup { threadGroupPrograms :: Map Text (TestProgram t a) }
 

@@ -21,6 +21,7 @@ module DodgerBlue.MyDslExample
   where
 
 import           Control.Concurrent.Async
+import           Control.Concurrent (threadDelay)
 import           Control.Concurrent.STM
 import           Control.Monad.Identity
 import           Control.Monad.Free.Church
@@ -31,7 +32,7 @@ import qualified DodgerBlue.Testing
 import           Test.QuickCheck
 
 data MyDslFunctions next =
-    MyDslFunctions next
+    MyDslWait Int next
     deriving (Functor)
 
 type MyDsl q = F (DodgerBlue.CustomDsl q MyDslFunctions)
@@ -112,20 +113,24 @@ idleForever
     => m ()
 idleForever = forever $ setPulseStatus False
 
+runMyDslFunctionIO :: MyDslFunctions (IO a) -> IO a
+runMyDslFunctionIO (MyDslWait seconds n) = threadDelay (seconds * 10000) >> n
+
+runMyDslFunctionTest :: Monad m => MyDslFunctions (a) -> m a
+runMyDslFunctionTest (MyDslWait _seconds n) = return n
+
 myEvalIO :: MyDsl TQueue a -> IO a
 myEvalIO =
     DodgerBlue.evalDslIO
         id
-        (\(MyDslFunctions n) ->
-              n)
+        runMyDslFunctionIO
 
 myEvalMultiDslTest ::
   DodgerBlue.Testing.ExecutionTree (DodgerBlue.Testing.TestProgram MyDslFunctions a)
   -> DodgerBlue.Testing.ExecutionTree (DodgerBlue.Testing.ThreadResult a)
 myEvalMultiDslTest programs =
     runIdentity $ (DodgerBlue.Testing.evalMultiDslTest
-          (\(MyDslFunctions n) ->
-                return n)
+          runMyDslFunctionTest
           DodgerBlue.Testing.emptyEvalState
           programs)
 
@@ -134,11 +139,10 @@ myEvalMultiDslTestGen ::
   -> Gen (DodgerBlue.Testing.ExecutionTree (DodgerBlue.Testing.ThreadResult a))
 myEvalMultiDslTestGen programs =
     DodgerBlue.Testing.evalMultiDslTest
-          (\(MyDslFunctions n) ->
-                return n)
+          runMyDslFunctionTest
           DodgerBlue.Testing.emptyEvalState
           programs
 
 myEvalTest :: MyDsl DodgerBlue.Testing.Queue a -> IO a
 myEvalTest p = do
-  DodgerBlue.Testing.evalDslTest (\(MyDslFunctions n) -> return n) p
+  DodgerBlue.Testing.evalDslTest runMyDslFunctionTest p
