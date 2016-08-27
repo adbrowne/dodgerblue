@@ -53,9 +53,11 @@ test-suite dodgerblue-test
                      , containers
                      , QuickCheck
                      , quickcheck-instances
+                     , resourcet
                      , stm
                      , async
                      , lens
+                     , transformers
                      , mtl
                      , free
                      , text

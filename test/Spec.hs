@@ -7,6 +7,7 @@
 
 import qualified Data.Map.Strict         as Map
 import           Data.Monoid
+import           Control.Monad.Trans.Resource
 import           Control.Concurrent.STM as STM
 import           Control.Concurrent (threadDelay)
 import           DodgerBlue.MyDslExample
@@ -59,7 +60,7 @@ childThreadShouldBlowUpParent =
       error "child thread blowing up"
     childBlowsUp = do
       DodgerBlue.forkChild childThread
-      wait 6
+      wait 60
       _ <- error "parent thread blew up" -- shouldn't happen as the child thread should blow up first
       return (1 :: Int)
 
@@ -79,10 +80,11 @@ parentThreadShouldKillChild :: SpecWith ()
 parentThreadShouldKillChild =
   it "When a parent thread exits the child should stop" $ do
       (q :: TQueue Int) <- newTQueueIO
-      _ <- id (forkChildAndExit q)
-      delay 6
+      let parentWaitTime = 120
+      _ <- runResourceT (forkChildAndExit q parentWaitTime)
+      delay 300
       queueLength <- length <$> atomically (drainQueue q)
-      queueLength `shouldSatisfy` (< 4)
+      queueLength `shouldSatisfy` (\x -> x > parentWaitTime - 50 && x < parentWaitTime + 50)
 
 ioUnitTests :: SpecWith ()
 ioUnitTests = do
@@ -120,7 +122,7 @@ main :: IO ()
 main = do
     unitTestSpecsIO <- testSpec "Unit tests - IO" (unitTestSpecs myEvalIO)
     unitTestSpecsTest <- testSpec "Unit tests - Test" (unitTestSpecs myEvalTest)
-    unitTestSpecsNoFree <- testSpec "Unit tests - NoFree" (unitTestSpecs id)
+    unitTestSpecsNoFree <- testSpec "Unit tests - NoFree" (unitTestSpecs runResourceT)
     unitTestTestInterpreter <- testSpec "Unit tests - test interpreter" testInterpreterUnitTests
     unitTestIO <- testSpec "Unit tests - IO" ioUnitTests
     defaultMain $

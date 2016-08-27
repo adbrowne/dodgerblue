@@ -23,6 +23,8 @@ module DodgerBlue.MyDslExample
   ,myEvalMultiDslTestGen)
   where
 
+import           Control.Monad.Trans.Class
+import           Control.Monad.Trans.Resource
 import           Control.Concurrent.Async hiding (wait)
 import           Control.Concurrent (threadDelay)
 import           Control.Concurrent.STM
@@ -63,14 +65,19 @@ class Monad m =>
     forkChild :: m () -> m ()
     setPulseStatus :: Bool -> m ()
 
-instance MonadMyDsl IO where
-    type QueueType IO = TQueue
+forkChildIO :: ResourceT IO () -> ResourceT IO ()
+forkChildIO c = do
+  _ <- allocate (async (runResourceT c)) cancel
+  return ()
+
+instance MonadMyDsl (ResourceT IO) where
+    type QueueType (ResourceT IO) = TQueue
     newQueue = DslIO.newQueue
     writeQueue = DslIO.writeQueue
     readQueue = DslIO.readQueue
     tryReadQueue = DslIO.tryReadQueue
-    forkChild c = (void . async) c
-    wait = waitIO
+    forkChild = forkChildIO
+    wait = lift . waitIO
     setPulseStatus _ = return ()
 
 instance MonadMyDsl (F (DodgerBlue.CustomDsl q MyDslFunctions)) where
@@ -128,10 +135,11 @@ forkChildAndExit
     :: MonadMyDsl m
     =>
     QueueType m Int
+    -> Int
     -> m ()
-forkChildAndExit q = do
+forkChildAndExit q waitTime = do
   forkChild (childThread q)
-  wait 3
+  wait waitTime
   return ()
   where
     childThread childQueue = forever $ do
