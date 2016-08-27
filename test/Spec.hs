@@ -60,7 +60,7 @@ childThreadShouldBlowUpParent =
       error "child thread blowing up"
     childBlowsUp = do
       DodgerBlue.forkChild childThread
-      wait 60
+      wait 300
       _ <- error "parent thread blew up" -- shouldn't happen as the child thread should blow up first
       return (1 :: Int)
 
