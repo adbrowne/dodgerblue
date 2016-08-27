@@ -10,6 +10,7 @@
 module DodgerBlue.Testing
   (evalDslTest,
    evalMultiDslTest,
+   customCmd,
    MemQ.Queue,
    MemQ.Queues,
    ThreadGroup(..),

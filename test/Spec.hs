@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveFunctor       #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -6,7 +7,10 @@
 
 import qualified Data.Map.Strict         as Map
 import           Data.Monoid
+import           Control.Concurrent.STM as STM
+import           Control.Concurrent (threadDelay)
 import           DodgerBlue.MyDslExample
+import           DodgerBlue
 import           Test.QuickCheck.Instances ()
 import           DodgerBlue.Testing
 import           Test.Tasty
@@ -45,6 +49,47 @@ testInterpreterUnitTests = do
               expected = ExecutionTree $ Map.singleton "main" (Map.singleton "main" (ThreadIdle))
             in result `shouldBe` expected
 
+childThreadShouldBlowUpParent :: SpecWith ()
+childThreadShouldBlowUpParent =
+  it "When the child thread blows up so should the parent" $ do
+      myEvalIO childBlowsUp `shouldThrow` (errorCall "child thread blowing up")
+  where
+    childThread = do
+      wait 3
+      error "child thread blowing up"
+    childBlowsUp = do
+      DodgerBlue.forkChild childThread
+      wait 6
+      _ <- error "parent thread blew up" -- shouldn't happen as the child thread should blow up first
+      return (1 :: Int)
+
+delay :: Int -> IO ()
+delay milliseconds = threadDelay (milliseconds * 1000)
+
+drainQueue :: TQueue a -> STM [a]
+drainQueue q =
+  go []
+  where
+    go acc = do
+      readResult <- STM.tryReadTQueue q
+      maybe (return acc) (\x -> go (x:acc)) readResult
+
+
+parentThreadShouldKillChild :: SpecWith ()
+parentThreadShouldKillChild =
+  it "When a parent thread exits the child should stop" $ do
+      (q :: TQueue Int) <- newTQueueIO
+      _ <- id (forkChildAndExit q)
+      delay 6
+      queueLength <- length <$> atomically (drainQueue q)
+      queueLength `shouldSatisfy` (< 4)
+
+ioUnitTests :: SpecWith ()
+ioUnitTests = do
+  describe "IO runner" $ do
+    childThreadShouldBlowUpParent
+    parentThreadShouldKillChild
+
 data MyDslProgram = MyDslProgram { myDslProgramName :: String, unMyDslProgram :: MyDsl Queue Int }
 
 instance Show MyDslProgram where
@@ -77,6 +122,7 @@ main = do
     unitTestSpecsTest <- testSpec "Unit tests - Test" (unitTestSpecs myEvalTest)
     unitTestSpecsNoFree <- testSpec "Unit tests - NoFree" (unitTestSpecs id)
     unitTestTestInterpreter <- testSpec "Unit tests - test interpreter" testInterpreterUnitTests
+    unitTestIO <- testSpec "Unit tests - IO" ioUnitTests
     defaultMain $
         testGroup
             "Tests"
@@ -84,6 +130,7 @@ main = do
             , unitTestSpecsTest
             , unitTestSpecsNoFree
             , unitTestTestInterpreter 
+            , unitTestIO
             , testProperty 
                   "All programs have an output"
                   prop_allProgramsHaveAnOutput

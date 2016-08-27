@@ -1,4 +1,5 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE FlexibleContexts #-}
 module DodgerBlue.IO
   (evalDslIO,
    newQueue,
@@ -10,7 +11,6 @@ where
 import           DodgerBlue.Types
 import           Control.Concurrent.Async
 import           Control.Concurrent.STM
-import           Control.Monad
 import           Control.Monad.Free.Church
 import           Control.Monad.IO.Class
 
@@ -43,8 +43,9 @@ evalDslIO runChild stepCustomCommand p = iterM stepProgram p
       readQueue q >>= n
     stepProgram (DslBase (ForkChild' childProgram n)) = do
       let runner = evalDslIO runChild stepCustomCommand childProgram
-      void . liftIO $ async (runChild runner)
+      childAsync <- liftIO $ async (runChild runner)
+      liftIO $ link childAsync
       n
     stepProgram (DslBase (SetPulseStatus' _status n)) = n -- ignore for now
-    stepProgram (DslCustom customCmd) =
-      stepCustomCommand customCmd
+    stepProgram (DslCustom cmd) =
+      stepCustomCommand cmd

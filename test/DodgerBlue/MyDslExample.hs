@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveFunctor          #-}
 {-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE RankNTypes             #-}
@@ -9,8 +10,10 @@ module DodgerBlue.MyDslExample
   (writeAndTryRead
   ,writeAndRead
   ,writeFromAChildProcess
+  ,DodgerBlue.MyDslExample.wait
   ,readForever
   ,idleForever
+  ,forkChildAndExit
   ,MyDsl
   ,MonadMyDsl
   ,MyDslFunctions
@@ -20,7 +23,7 @@ module DodgerBlue.MyDslExample
   ,myEvalMultiDslTestGen)
   where
 
-import           Control.Concurrent.Async
+import           Control.Concurrent.Async hiding (wait)
 import           Control.Concurrent (threadDelay)
 import           Control.Concurrent.STM
 import           Control.Monad.Identity
@@ -56,6 +59,7 @@ class Monad m =>
         :: forall a.
            Typeable a
         => QueueType m a -> m (Maybe a)
+    wait :: Int -> m ()
     forkChild :: m () -> m ()
     setPulseStatus :: Bool -> m ()
 
@@ -66,6 +70,7 @@ instance MonadMyDsl IO where
     readQueue = DslIO.readQueue
     tryReadQueue = DslIO.tryReadQueue
     forkChild c = (void . async) c
+    wait = waitIO
     setPulseStatus _ = return ()
 
 instance MonadMyDsl (F (DodgerBlue.CustomDsl q MyDslFunctions)) where
@@ -76,6 +81,12 @@ instance MonadMyDsl (F (DodgerBlue.CustomDsl q MyDslFunctions)) where
     tryReadQueue = DodgerBlue.tryReadQueue
     forkChild = DodgerBlue.forkChild
     setPulseStatus = DodgerBlue.setPulseStatus
+    wait = waitFree
+
+waitFree
+    :: (MonadFree (DodgerBlue.CustomDsl q MyDslFunctions) m)
+    => Int -> m ()
+waitFree seconds = DodgerBlue.Testing.customCmd $ MyDslWait seconds ()
 
 writeAndTryRead
     :: MonadMyDsl m
@@ -113,11 +124,28 @@ idleForever
     => m ()
 idleForever = forever $ setPulseStatus False
 
+forkChildAndExit
+    :: MonadMyDsl m
+    =>
+    QueueType m Int
+    -> m ()
+forkChildAndExit q = do
+  forkChild (childThread q)
+  wait 3
+  return ()
+  where
+    childThread childQueue = forever $ do
+      wait 1
+      writeQueue childQueue 1
+
+waitIO :: Int -> IO ()
+waitIO milliseconds = threadDelay (milliseconds * 1000)
+
 runMyDslFunctionIO :: MyDslFunctions (IO a) -> IO a
-runMyDslFunctionIO (MyDslWait seconds n) = threadDelay (seconds * 10000) >> n
+runMyDslFunctionIO (MyDslWait milliseconds n) = waitIO milliseconds  >> n
 
 runMyDslFunctionTest :: Monad m => MyDslFunctions (a) -> m a
-runMyDslFunctionTest (MyDslWait _seconds n) = return n
+runMyDslFunctionTest (MyDslWait _milliseconds n) = return n
 
 myEvalIO :: MyDsl TQueue a -> IO a
 myEvalIO =

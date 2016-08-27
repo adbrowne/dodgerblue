@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -5,6 +6,7 @@
 
 module DodgerBlue.Types
   (CustomDsl(..),
+   customCmd,
    ConcurrentDslCmd(..),
    CustomCommandStep) where
 
@@ -30,3 +32,7 @@ instance Functor d => Functor (CustomDsl q d) where
   fmap f (DslCustom a) = DslCustom $ fmap f a
 
 type CustomCommandStep t m = forall a. t (m a) -> m a
+
+customCmd :: (Functor t, MonadFree (CustomDsl q t) m) => t a -> m a
+customCmd x = liftF . DodgerBlue.Types.DslCustom $ x
+
