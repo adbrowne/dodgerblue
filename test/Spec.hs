@@ -84,13 +84,20 @@ parentThreadShouldKillChild =
       _ <- runResourceT (forkChildAndExit q parentWaitTime)
       delay 300
       queueLength <- length <$> atomically (drainQueue q)
-      queueLength `shouldSatisfy` (\x -> x > parentWaitTime - 50 && x < parentWaitTime + 50)
+      queueLength `shouldSatisfy` (\x -> x > 1 && x < parentWaitTime + 50)
+
+childThreadShouldContinueRunningWhileParentThreadIs :: SpecWith ()
+childThreadShouldContinueRunningWhileParentThreadIs =
+  it "While the parent thread is running the child thread should run" $ do
+      result <- runResourceT forkChildAndWaitForResult
+      result `shouldBe` 5050
 
 ioUnitTests :: SpecWith ()
 ioUnitTests = do
   describe "IO runner" $ do
     childThreadShouldBlowUpParent
     parentThreadShouldKillChild
+    childThreadShouldContinueRunningWhileParentThreadIs
 
 data MyDslProgram = MyDslProgram { myDslProgramName :: String, unMyDslProgram :: MyDsl Queue Int }
 

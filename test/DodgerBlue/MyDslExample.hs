@@ -14,6 +14,7 @@ module DodgerBlue.MyDslExample
   ,readForever
   ,idleForever
   ,forkChildAndExit
+  ,forkChildAndWaitForResult
   ,MyDsl
   ,MonadMyDsl
   ,MyDslFunctions
@@ -31,6 +32,7 @@ import           Control.Concurrent.STM
 import           Control.Monad.Identity
 import           Control.Monad.Free.Church
 import           Data.Typeable
+import           Data.Foldable
 import qualified DodgerBlue
 import qualified DodgerBlue.IO             as DslIO
 import qualified DodgerBlue.Testing
@@ -145,6 +147,24 @@ forkChildAndExit q waitTime = do
     childThread childQueue = forever $ do
       wait 1
       writeQueue childQueue 1
+
+forkChildAndWaitForResult
+    :: MonadMyDsl m
+    =>
+    m Int
+forkChildAndWaitForResult = do
+  q <- newQueue
+  signalQ <- newQueue
+  forkChild (childThread q signalQ)
+  traverse_ (writeQueue q) [(1::Int)..100]
+  readQueue signalQ
+  where
+    childThread childQ childSignalQ = go 0
+      where
+        go 5050 = writeQueue childSignalQ 5050
+        go acc = do
+          r <- readQueue childQ
+          go (acc + r)
 
 waitIO :: Int -> IO ()
 waitIO milliseconds = threadDelay (milliseconds * 1000)
