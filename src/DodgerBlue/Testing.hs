@@ -16,6 +16,7 @@ module DodgerBlue.Testing
    ThreadGroup(..),
    ThreadResult(..),
    TestProgram,
+   EvalState,
    ExecutionTree(..),
    ThreadResultGroup(..),
    loopStateLastRan,
