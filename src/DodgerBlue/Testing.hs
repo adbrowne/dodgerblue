@@ -314,7 +314,7 @@ checkIsComplete runnableThreads  =
 
 evalMultiDslTest ::
   (Monad m, Functor t, TestEvaluator m) =>
-  TestCustomCommandStep t m ->
+  (Text -> Text -> TestCustomCommandStep t m) ->
   EvalState ->
   ExecutionTree (TestProgram t a) ->
   m (ExecutionTree (ThreadResult a))
@@ -337,7 +337,7 @@ evalMultiDslTest stepCustomCommand testState threadMap =
                 progressThread nextProgram
                 go
     progressThread ((node,threadName),p) = do
-        (currentThreadUpdate,newThreadUpdate) <- stepEvalThread (\x -> lift $ stepCustomCommand x) p
+        (currentThreadUpdate,newThreadUpdate) <- stepEvalThread (\x -> lift $ stepCustomCommand node threadName x) p
         let updateCurrentThread =
                 updateWithKeyExecutionTree
                     (const currentThreadUpdate)
@@ -354,7 +354,7 @@ evalMultiDslTest stepCustomCommand testState threadMap =
 
 evalDslTest ::
   (Monad m, Functor t, TestEvaluator m) =>
-  TestCustomCommandStep t m ->
+  (Text -> Text -> TestCustomCommandStep t m) ->
   F (CustomDsl MemQ.Queue t) a ->
   m a
 evalDslTest stepCustomCommand p =

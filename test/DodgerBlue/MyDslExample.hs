@@ -31,6 +31,7 @@ import           Control.Concurrent (threadDelay)
 import           Control.Concurrent.STM
 import           Control.Monad.Identity
 import           Control.Monad.Free.Church
+import           Data.Text (Text)
 import           Data.Typeable
 import           Data.Foldable
 import qualified DodgerBlue
@@ -172,8 +173,8 @@ waitIO milliseconds = threadDelay (milliseconds * 1000)
 runMyDslFunctionIO :: MyDslFunctions (IO a) -> IO a
 runMyDslFunctionIO (MyDslWait milliseconds n) = waitIO milliseconds  >> n
 
-runMyDslFunctionTest :: Monad m => MyDslFunctions (a) -> m a
-runMyDslFunctionTest (MyDslWait _milliseconds n) = return n
+runMyDslFunctionTest :: Monad m => Text -> Text -> MyDslFunctions (a) -> m a
+runMyDslFunctionTest _node _threadName (MyDslWait _milliseconds n) = return n
 
 myEvalIO :: MyDsl TQueue a -> IO a
 myEvalIO =
