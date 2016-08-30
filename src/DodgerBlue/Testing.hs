@@ -20,6 +20,7 @@ module DodgerBlue.Testing
    EvalState,
    ExecutionTree(..),
    ThreadResultGroup(..),
+   fromThreadResult,
    loopStateLastRan,
    emptyEvalState)
 where
