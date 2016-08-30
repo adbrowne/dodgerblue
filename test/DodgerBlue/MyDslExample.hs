@@ -5,6 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE RankNTypes             #-}
 {-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE OverloadedStrings      #-}
 
 module DodgerBlue.MyDslExample
   (writeAndTryRead
@@ -202,4 +203,4 @@ myEvalMultiDslTestGen programs =
 
 myEvalTest :: MyDsl DodgerBlue.Testing.Queue a -> IO a
 myEvalTest p = do
-  DodgerBlue.Testing.evalDslTest runMyDslFunctionTest p
+  DodgerBlue.Testing.evalDslTest runMyDslFunctionTest "MainNode" "MainThread" p

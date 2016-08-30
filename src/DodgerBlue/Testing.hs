@@ -20,7 +20,6 @@ module DodgerBlue.Testing
    EvalState,
    ExecutionTree(..),
    ThreadResultGroup(..),
-   fromThreadResult,
    loopStateLastRan,
    emptyEvalState)
 where
@@ -356,11 +355,12 @@ evalMultiDslTest stepCustomCommand testState threadMap =
 evalDslTest ::
   (Monad m, Functor t, TestEvaluator m) =>
   (Text -> Text -> TestCustomCommandStep t m) ->
+  Text ->
+  Text ->
   F (CustomDsl MemQ.Queue t) a ->
   m a
-evalDslTest stepCustomCommand p =
+evalDslTest stepCustomCommand nodeName threadName p =
   let
-    mainThreadKey = "MainThread"
-    inputMap = ExecutionTree $ Map.singleton mainThreadKey (Map.singleton mainThreadKey p)
+    inputMap = ExecutionTree $ Map.singleton nodeName (Map.singleton threadName p)
     resultSet = evalMultiDslTest stepCustomCommand emptyEvalState inputMap
-  in fromThreadResult . fromJust . (getExecutionTreeEntry mainThreadKey mainThreadKey) <$> resultSet
+  in fromThreadResult . fromJust . (getExecutionTreeEntry nodeName threadName) <$> resultSet
