@@ -261,6 +261,9 @@ instance TestEvaluator Gen where
 instance (TestEvaluator m, Monad m) => TestEvaluator (StateT s m) where
   chooseNextThread a b = lift $ chooseNextThread a b
 
+instance (Monad m, TestEvaluator m) => TestEvaluator (ReaderT r m) where
+  chooseNextThread a b = lift $ chooseNextThread a b
+
 mapInsertUniqueKeyWithSuffix :: Text -> a -> Map Text a -> Map Text a
 mapInsertUniqueKeyWithSuffix suffix x m =
   let
