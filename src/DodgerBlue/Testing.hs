@@ -270,8 +270,8 @@ mapInsertUniqueKeyWithSuffix suffix x m =
   in Map.insert uniqueKey x m
 
 isProgramStateIdle :: ProgramState t a -> Bool
-isProgramStateIdle ( InternalProgramRunning (_, x)  ) = maybe False (> 0) x
-isProgramStateIdle ( ExternalProgramRunning (_, x) ) = maybe False (> 0) x
+isProgramStateIdle ( InternalProgramRunning (_, x)  ) = maybe False (> 2) x
+isProgramStateIdle ( ExternalProgramRunning (_, x) ) = maybe False (> 2) x
 isProgramStateIdle ( ExternalProgramComplete _ ) = True
 
 isProgramStateActive :: ProgramState t a -> Bool
