@@ -31,6 +31,7 @@ import           Data.List.NonEmpty hiding (head, dropWhile)
 import           Control.Monad.Free.Church
 import qualified Control.Monad.Free                     as Free
 import           Control.Monad.State
+import           Control.Monad.Reader
 import qualified Control.Monad.Trans.State.Lazy as LazyState
 import           Data.Text (Text)
 import qualified Data.Text as Text
