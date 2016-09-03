@@ -61,34 +61,32 @@ data EvalState = EvalState {
   _evalStateQueues :: MemQ.Queues
 }
 
-newtype ExecutionTree a = ExecutionTree { unExecutionTree :: Map Text (Map Text a) }
+newtype ExecutionTree a = ExecutionTree { unExecutionTree :: Map Text a }
   deriving (Eq,Show)
 
 instance Arbitrary a => Arbitrary (ExecutionTree a) where
   arbitrary = ExecutionTree <$> arbitrary
 
 instance Foldable ExecutionTree where
-  foldMap f (ExecutionTree t) = (foldMap . foldMap) f t
+  foldMap f (ExecutionTree t) = foldMap f t
 
 instance Traversable ExecutionTree where
-  traverse f (ExecutionTree t) = ExecutionTree <$> (traverse . traverse) f t
+  traverse f (ExecutionTree t) = ExecutionTree <$> traverse f t
 
 instance Functor ExecutionTree where
-  fmap f (ExecutionTree t) = ExecutionTree $ (fmap . fmap) f t
+  fmap f (ExecutionTree t) = ExecutionTree $ fmap f t
 
 mapMaybeExecutionTree :: (a -> Maybe b) -> ExecutionTree a -> ExecutionTree b
 mapMaybeExecutionTree f ExecutionTree{..} =
-  ExecutionTree $ fmap (Map.mapMaybe f) unExecutionTree
+  ExecutionTree $ Map.mapMaybe f unExecutionTree
 
-updateWithKeyExecutionTree :: (a -> Maybe a) -> Text -> Text -> ExecutionTree a -> ExecutionTree a
-updateWithKeyExecutionTree f nodeName threadName (ExecutionTree t) =
-  ExecutionTree $ Map.adjust (Map.update f threadName) nodeName t
+updateWithKeyExecutionTree :: (a -> Maybe a) -> Text -> ExecutionTree a -> ExecutionTree a
+updateWithKeyExecutionTree f threadName (ExecutionTree t) =
+  ExecutionTree $ (Map.update f threadName) t
 
-getExecutionTreeEntry :: Text -> Text -> ExecutionTree a -> Maybe a
-getExecutionTreeEntry node threadName ExecutionTree{..} = do
-  threads <- Map.lookup node unExecutionTree
-  r <- Map.lookup threadName threads
-  return r
+getExecutionTreeEntry :: Text -> ExecutionTree a -> Maybe a
+getExecutionTreeEntry threadName ExecutionTree{..} =
+  Map.lookup threadName unExecutionTree
 
 emptyEvalState :: EvalState
 emptyEvalState = EvalState {
@@ -99,7 +97,7 @@ $(makeLenses ''EvalState)
 data LoopState t r = LoopState {
   _loopStatePrograms :: ExecutionTree (ProgramState t r),
   _loopStateTestState :: EvalState,
-  _loopStateLastRan :: Maybe (Text,Text),
+  _loopStateLastRan :: Maybe (Text),
   _loopStateInIdleCoolDown :: Bool }
 
 $(makeLenses ''LoopState)
@@ -219,8 +217,8 @@ buildResults  = do
       else
         Just ThreadBlocked
 
-foldlWithKey' :: (s -> Text -> Text -> a -> s) -> s -> ExecutionTree a -> s
-foldlWithKey' acc z (ExecutionTree t) = Map.foldlWithKey' (\s nodeName -> Map.foldlWithKey' (\s1 threadName v -> acc s1 nodeName threadName v) s) z t
+foldlWithKey' :: (s -> Text -> a -> s) -> s -> ExecutionTree a -> s
+foldlWithKey' acc z (ExecutionTree t) = Map.foldlWithKey' (\s threadName v -> acc s threadName v) z t
 
 isProgramBlocked :: (MonadState (LoopState t a) m, Functor t) => TestProgramFree t b -> m (Bool)
 isProgramBlocked (Free.Free (DslBase (ReadQueue' q _n))) = do
@@ -228,25 +226,25 @@ isProgramBlocked (Free.Free (DslBase (ReadQueue' q _n))) = do
   return $ MemQ.isEmptyQueue qs q
 isProgramBlocked _ = return False
 
-runnablePrograms :: (MonadState (LoopState t a) m, Monad m, Functor t) => ExecutionTree (ProgramState t a) -> m [((Text,Text),ProgramState t a)]
+runnablePrograms :: (MonadState (LoopState t a) m, Monad m, Functor t) => ExecutionTree (ProgramState t a) -> m [(Text,ProgramState t a)]
 runnablePrograms  t = (fmap catMaybes) . sequenceA $ foldlWithKey' acc [] t
- where acc xs node threadName programState =
-         (justIfRunnable node threadName programState):xs
-       justIfRunnable node threadName programState@(ExternalProgramRunning (p,_idleCount)) = do
+ where acc xs threadName programState =
+         (justIfRunnable threadName programState):xs
+       justIfRunnable threadName programState@(ExternalProgramRunning (p,_idleCount)) = do
          isBlocked <- isProgramBlocked p
          if isBlocked then
            return Nothing
-         else return $ Just ((node, threadName), programState)
-       justIfRunnable _ _ (ExternalProgramComplete _) =
+         else return $ Just (threadName, programState)
+       justIfRunnable _ (ExternalProgramComplete _) =
          return Nothing
-       justIfRunnable node threadName programState@(InternalProgramRunning (p,_idleCount)) = do
+       justIfRunnable threadName programState@(InternalProgramRunning (p,_idleCount)) = do
          isBlocked <- isProgramBlocked p
          if isBlocked then
            return $ Nothing
-         else return $ Just ((node, threadName), programState)
+         else return $ Just (threadName, programState)
 
 class TestEvaluator m where
-  chooseNextThread :: Maybe (Text,Text) -> NonEmpty ((Text,Text), a) -> m ((Text,Text), a)
+  chooseNextThread :: Maybe Text -> NonEmpty (Text, a) -> m (Text, a)
 
 instance TestEvaluator Identity where
   chooseNextThread Nothing ((k,x) :| _) = return (k,x)
@@ -294,7 +292,7 @@ resetIdleCount = setIdleCount Nothing
 setAllIdle :: (MonadState (LoopState t r) m) => m ()
 setAllIdle = loopStatePrograms %= fmap resetIdleCount
 
-checkIsComplete :: (MonadState (LoopState t r) m) => [(( Text,Text ),ProgramState t r)] -> m Bool
+checkIsComplete :: (MonadState (LoopState t r) m) => [(( Text ),ProgramState t r)] -> m Bool
 checkIsComplete runnableThreads  =
   let
     allIdle = getAll $ foldMap (\(_,ps) -> All (isProgramStateIdle ps)) runnableThreads
@@ -318,7 +316,7 @@ checkIsComplete runnableThreads  =
 
 evalMultiDslTest ::
   (Monad m, Functor t, TestEvaluator m) =>
-  (Text -> Text -> TestCustomCommandStep t m) ->
+  (Text -> TestCustomCommandStep t m) ->
   EvalState ->
   ExecutionTree (TestProgram t a) ->
   m (ExecutionTree (ThreadResult a))
@@ -340,31 +338,27 @@ evalMultiDslTest stepCustomCommand testState threadMap =
               else do
                 progressThread nextProgram
                 go
-    progressThread ((node,threadName),p) = do
-        (currentThreadUpdate,newThreadUpdate) <- stepEvalThread (\x -> lift $ stepCustomCommand node threadName x) p
+    progressThread ((threadName),p) = do
+        (currentThreadUpdate,newThreadUpdate) <- stepEvalThread (\x -> lift $ stepCustomCommand threadName x) p
         let updateCurrentThread =
                 updateWithKeyExecutionTree
                     (const currentThreadUpdate)
-                    node
                     threadName
-        loopStatePrograms %= ((addSubThread node threadName newThreadUpdate) . updateCurrentThread)
-    addSubThread _ _ Nothing tree = tree
-    addSubThread node threadName (Just newProgramState) (ExecutionTree t) =
+        loopStatePrograms %= ((addSubThread threadName newThreadUpdate) . updateCurrentThread)
+    addSubThread _ Nothing tree = tree
+    addSubThread threadName (Just newProgramState) (ExecutionTree t) =
         ExecutionTree $
-        Map.adjust
             (mapInsertUniqueKeyWithSuffix threadName newProgramState)
-            node
             t
 
 evalDslTest ::
   (Monad m, Functor t, TestEvaluator m) =>
-  (Text -> Text -> TestCustomCommandStep t m) ->
-  Text ->
+  (Text -> TestCustomCommandStep t m) ->
   Text ->
   F (CustomDsl MemQ.Queue t) a ->
   m a
-evalDslTest stepCustomCommand nodeName threadName p =
+evalDslTest stepCustomCommand threadName p =
   let
-    inputMap = ExecutionTree $ Map.singleton nodeName (Map.singleton threadName p)
+    inputMap = ExecutionTree $ Map.singleton threadName p
     resultSet = evalMultiDslTest stepCustomCommand emptyEvalState inputMap
-  in fromThreadResult . fromJust . (getExecutionTreeEntry nodeName threadName) <$> resultSet
+  in fromThreadResult . fromJust . (getExecutionTreeEntry threadName) <$> resultSet

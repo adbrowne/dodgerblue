@@ -174,8 +174,8 @@ waitIO milliseconds = threadDelay (milliseconds * 1000)
 runMyDslFunctionIO :: MyDslFunctions (IO a) -> IO a
 runMyDslFunctionIO (MyDslWait milliseconds n) = waitIO milliseconds  >> n
 
-runMyDslFunctionTest :: Monad m => Text -> Text -> MyDslFunctions (a) -> m a
-runMyDslFunctionTest _node _threadName (MyDslWait _milliseconds n) = return n
+runMyDslFunctionTest :: Monad m => Text -> MyDslFunctions (a) -> m a
+runMyDslFunctionTest _threadName (MyDslWait _milliseconds n) = return n
 
 myEvalIO :: MyDsl TQueue a -> IO a
 myEvalIO =
@@ -203,4 +203,4 @@ myEvalMultiDslTestGen programs =
 
 myEvalTest :: MyDsl DodgerBlue.Testing.Queue a -> IO a
 myEvalTest p = do
-  DodgerBlue.Testing.evalDslTest runMyDslFunctionTest "MainNode" "MainThread" p
+  DodgerBlue.Testing.evalDslTest runMyDslFunctionTest "MainThread" p

@@ -39,15 +39,15 @@ testInterpreterUnitTests = do
   describe "test interpreter unit tests" $ do
     it "blocked program returns blocked result" $
             let
-              input = ExecutionTree $ Map.singleton "main" (Map.singleton "main" readForever)
+              input = ExecutionTree $ Map.singleton "main" readForever
               result = myEvalMultiDslTest input
-              expected = ExecutionTree $ Map.singleton "main" (Map.singleton "main" (ThreadBlocked))
+              expected = ExecutionTree $ Map.singleton "main" (ThreadBlocked)
             in result `shouldBe` expected
     it "idle program returns idle result" $
             let
-              input = ExecutionTree $ Map.singleton "main" (Map.singleton "main" idleForever)
+              input = ExecutionTree $ Map.singleton "main" idleForever
               result = myEvalMultiDslTest input
-              expected = ExecutionTree $ Map.singleton "main" (Map.singleton "main" (ThreadIdle))
+              expected = ExecutionTree $ Map.singleton "main" (ThreadIdle)
             in result `shouldBe` expected
 
 childThreadShouldBlowUpParent :: SpecWith ()
@@ -120,8 +120,8 @@ prop_allProgramsHaveAnOutput =
 
 prop_CanRunTestsInsideGenMonad :: Property
 prop_CanRunTestsInsideGenMonad =
-    let programInput = ExecutionTree $ Map.singleton "MyNode" (Map.singleton "MyThread" writeAndRead)
-        expected = ExecutionTree $ Map.singleton "MyNode" (Map.singleton "MyThread" (ThreadResult (1 :: Int)))
+    let programInput = ExecutionTree $ Map.singleton "MyThread" writeAndRead
+        expected = ExecutionTree $ Map.singleton "MyThread" (ThreadResult (1 :: Int))
         resultIsOne result = result === expected
     in forAll (myEvalMultiDslTestGen programInput) resultIsOne
 
