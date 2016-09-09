@@ -358,11 +358,11 @@ evalMultiDslTest stepCustomCommand  activeCallback testState threadMap =
                 updateWithKeyExecutionTree
                     (const currentThreadUpdate)
                     threadName
-        loopStatePrograms %= ((addSubThread threadName newThreadUpdate) . updateCurrentThread)
-    addSubThread _ Nothing tree = tree
-    addSubThread threadName (Just (newProgramName,  newProgramState)) (ExecutionTree t) =
+        loopStatePrograms %= (addSubThread newThreadUpdate . updateCurrentThread)
+    addSubThread Nothing tree = tree
+    addSubThread (Just (newProgramName,  newProgramState)) (ExecutionTree t) =
         ExecutionTree $
-            (mapInsertUniqueKeyWithSuffix newProgramName newProgramState)
+            mapInsertUniqueKeyWithSuffix newProgramName newProgramState
             t
 
 evalDslTest ::
