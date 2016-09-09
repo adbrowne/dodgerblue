@@ -25,6 +25,7 @@ module DodgerBlue.Testing
 where
 
 import           Control.Lens
+import           Debug.Trace
 import           Data.Maybe (fromJust, catMaybes)
 import           Data.Monoid
 import           Data.List.NonEmpty hiding (head, dropWhile, filter)
@@ -257,7 +258,10 @@ instance TestEvaluator IO where
   chooseNextThread (Just _) ((k,x) :| _) = return (k,x)
 
 instance TestEvaluator Gen where
-  chooseNextThread _ (x :| xs) = Test.QuickCheck.elements (x:xs)
+  chooseNextThread _ (x :| xs) = do
+    n <- Test.QuickCheck.elements (x:xs)
+    traceM ("next thread: " <> show (fst n))
+    return n
 
 instance (TestEvaluator m, Monad m) => TestEvaluator (StateT s m) where
   chooseNextThread a b = lift $ chooseNextThread a b
