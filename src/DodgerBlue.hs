@@ -11,6 +11,7 @@ module DodgerBlue
   ,CustomDsl)
   where
 
+import Data.Text (Text)
 import Data.Typeable
 import Control.Monad.Free.Church
 import DodgerBlue.IO (evalDslIO)
@@ -18,8 +19,8 @@ import DodgerBlue.Types
 
 forkChild
     :: (Functor d, MonadFree (CustomDsl q d) m)
-    => F (CustomDsl q d) () -> m ()
-forkChild p = liftF . DslBase $ ForkChild' p ()
+    => Text -> F (CustomDsl q d) () -> m ()
+forkChild name p = liftF . DslBase $ ForkChild' name p ()
 
 newQueue
     :: (Functor d, MonadFree (CustomDsl q d) m, Typeable a)

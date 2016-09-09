@@ -66,11 +66,11 @@ class Monad m =>
            Typeable a
         => QueueType m a -> m (Maybe a)
     wait :: Int -> m ()
-    forkChild :: m () -> m ()
+    forkChild :: Text -> m () -> m ()
     setPulseStatus :: Bool -> m ()
 
-forkChildIO :: ResourceT IO () -> ResourceT IO ()
-forkChildIO c = do
+forkChildIO :: Text -> ResourceT IO () -> ResourceT IO ()
+forkChildIO _childName c = do
   _ <- allocate (async (runResourceT c)) cancel
   return ()
 
@@ -120,7 +120,7 @@ writeFromAChildProcess
     => m Int
 writeFromAChildProcess = do
     q <- newQueue
-    forkChild (writeQueue q 1)
+    forkChild "childWriter" (writeQueue q 1)
     readQueue q
 
 readForever
@@ -142,7 +142,7 @@ forkChildAndExit
     -> Int
     -> m ()
 forkChildAndExit q waitTime = do
-  forkChild (childThread q)
+  forkChild "childThread" (childThread q)
   wait waitTime
   return ()
   where
@@ -157,7 +157,7 @@ forkChildAndWaitForResult
 forkChildAndWaitForResult = do
   q <- newQueue
   signalQ <- newQueue
-  forkChild (childThread q signalQ)
+  forkChild "childThread" (childThread q signalQ)
   traverse_ (writeQueue q) [(1::Int)..100]
   readQueue signalQ
   where

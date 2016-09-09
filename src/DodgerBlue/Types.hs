@@ -10,6 +10,7 @@ module DodgerBlue.Types
    ConcurrentDslCmd(..),
    CustomCommandStep) where
 
+import Data.Text (Text)
 import Data.Typeable
 import Control.Monad.Free.Church
 
@@ -18,7 +19,7 @@ data ConcurrentDslCmd q d next where
   WriteQueue' :: Typeable a => q a -> a -> next -> ConcurrentDslCmd q d next
   TryReadQueue' :: Typeable a => q a ->  (Maybe a -> next) -> ConcurrentDslCmd q d next
   ReadQueue' :: Typeable a => q a ->  (a -> next) -> ConcurrentDslCmd q d next
-  ForkChild' :: F (CustomDsl q d) () -> next -> ConcurrentDslCmd q d next
+  ForkChild' :: Text -> F (CustomDsl q d) () -> next -> ConcurrentDslCmd q d next
   SetPulseStatus' :: Bool -> next -> ConcurrentDslCmd q d next
 
 deriving instance Functor (ConcurrentDslCmd q d)

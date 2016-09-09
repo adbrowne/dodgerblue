@@ -41,7 +41,7 @@ evalDslIO runChild stepCustomCommand p = iterM stepProgram p
       tryReadQueue q >>= n
     stepProgram (DslBase (ReadQueue' q n)) =
       readQueue q >>= n
-    stepProgram (DslBase (ForkChild' childProgram n)) = do
+    stepProgram (DslBase (ForkChild' _childName childProgram n)) = do
       let runner = evalDslIO runChild stepCustomCommand childProgram
       childAsync <- liftIO $ async (runChild runner)
       liftIO $ link childAsync

@@ -149,7 +149,7 @@ data ThreadResultGroup a = ThreadResultGroup {
 data StepResult t a =
   StepResultComplete a
   | StepResultContinue (TestProgramFree t a, Maybe Bool)
-  | StepResultFork (TestProgramFree t a) (TestProgramFree t ())
+  | StepResultFork (TestProgramFree t a) Text (TestProgramFree t ())
 
 standardContinueStep :: TestProgramFree t a -> StepResult t a
 standardContinueStep n = StepResultContinue (n, Nothing)
@@ -167,8 +167,8 @@ stepProgram _ cmd@(Free.Free (DslBase (ReadQueue' q n))) = do
   result <- runTryReadQueueCmd q
   case result of Just a  -> return $ standardContinueStep (n a)
                  Nothing -> return (standardContinueStep cmd)
-stepProgram _ (Free.Free (DslBase (ForkChild' childProgram n))) =
-  return (StepResultFork n (fromF childProgram))
+stepProgram _ (Free.Free (DslBase (ForkChild' childName childProgram n))) =
+  return (StepResultFork n childName (fromF childProgram))
 stepProgram _ (Free.Free (DslBase (SetPulseStatus' active n))) =
   return (StepResultContinue (n, Just active))
 stepProgram stepCustomCommand (Free.Free (DslCustom cmd)) =
@@ -193,17 +193,17 @@ stepEvalThread ::
   (MonadState (LoopState t r) m, Functor t) =>
   TestCustomCommandStep t m ->
   ProgramState t r ->
-  m (Maybe (ProgramState t r), Maybe (ProgramState t r))
+  m (Maybe (ProgramState t r), Maybe (Text, ProgramState t r))
 stepEvalThread stepCustomCommand (InternalProgramRunning (p,idleCount)) = do
   result <- stepProgram stepCustomCommand p
   case result of StepResultComplete () -> return $ (Nothing, Nothing)
                  StepResultContinue (n,isActive) -> return $ (Just (InternalProgramRunning (n, updateIdleCount isActive idleCount)), Nothing)
-                 StepResultFork n newProgram -> return $ (Just (InternalProgramRunning (n, idleCount)), Just  (mkInternalProgramRunning newProgram))
+                 StepResultFork n childName newProgram -> return $ (Just (InternalProgramRunning (n, idleCount)), Just  (childName, mkInternalProgramRunning newProgram))
 stepEvalThread stepCustomCommand (ExternalProgramRunning (p,idleCount)) = do
   result <- stepProgram stepCustomCommand p
   case result of StepResultComplete a -> return $ (Just (ExternalProgramComplete a), Nothing)
                  StepResultContinue (n,isActive) -> return $ (Just (ExternalProgramRunning (n, updateIdleCount isActive idleCount)), Nothing)
-                 StepResultFork n newProgram -> return $ (Just (ExternalProgramRunning (n,idleCount)), Just (mkInternalProgramRunning newProgram))
+                 StepResultFork n childName newProgram -> return $ (Just (ExternalProgramRunning (n,idleCount)), Just (childName, mkInternalProgramRunning newProgram))
 stepEvalThread _ (ExternalProgramComplete a) = return (Just (ExternalProgramComplete a), Nothing)
 
 buildResults :: MonadState (LoopState t a) m => m (ExecutionTree (ThreadResult a))
@@ -360,9 +360,9 @@ evalMultiDslTest stepCustomCommand  activeCallback testState threadMap =
                     threadName
         loopStatePrograms %= ((addSubThread threadName newThreadUpdate) . updateCurrentThread)
     addSubThread _ Nothing tree = tree
-    addSubThread threadName (Just newProgramState) (ExecutionTree t) =
+    addSubThread threadName (Just (newProgramName,  newProgramState)) (ExecutionTree t) =
         ExecutionTree $
-            (mapInsertUniqueKeyWithSuffix threadName newProgramState)
+            (mapInsertUniqueKeyWithSuffix newProgramName newProgramState)
             t
 
 evalDslTest ::
