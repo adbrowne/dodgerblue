@@ -189,6 +189,7 @@ myEvalMultiDslTest ::
 myEvalMultiDslTest programs =
     runIdentity $ (DodgerBlue.Testing.evalMultiDslTest
           runMyDslFunctionTest
+          (\_ _ -> return ())
           DodgerBlue.Testing.emptyEvalState
           programs)
 
@@ -198,6 +199,7 @@ myEvalMultiDslTestGen ::
 myEvalMultiDslTestGen programs =
     DodgerBlue.Testing.evalMultiDslTest
           runMyDslFunctionTest
+          (\_ _ -> return ())
           DodgerBlue.Testing.emptyEvalState
           programs
 

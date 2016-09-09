@@ -27,7 +27,7 @@ where
 import           Control.Lens
 import           Data.Maybe (fromJust, catMaybes)
 import           Data.Monoid
-import           Data.List.NonEmpty hiding (head, dropWhile)
+import           Data.List.NonEmpty hiding (head, dropWhile, filter)
 import           Control.Monad.Free.Church
 import qualified Control.Monad.Free                     as Free
 import           Control.Monad.State
@@ -97,6 +97,7 @@ $(makeLenses ''EvalState)
 data LoopState t r = LoopState {
   _loopStatePrograms :: ExecutionTree (ProgramState t r),
   _loopStateTestState :: EvalState,
+  _loopStateIterations :: Int,
   _loopStateLastRan :: Maybe (Text),
   _loopStateInIdleCoolDown :: Bool }
 
@@ -178,6 +179,7 @@ buildLoopState threadMap testState =
     LoopState {
       _loopStatePrograms = fmap (mkExternalProgramRunning . fromF) threadMap,
       _loopStateTestState = testState,
+      _loopStateIterations = 0,
       _loopStateLastRan = mempty,
       _loopStateInIdleCoolDown = False }
 
@@ -292,6 +294,11 @@ resetIdleCount = setIdleCount Nothing
 setAllIdle :: (MonadState (LoopState t r) m) => m ()
 setAllIdle = loopStatePrograms %= fmap resetIdleCount
 
+reportActiveThreads :: (MonadState (LoopState t r) m) => (Int -> [Text] -> m ()) -> [(( Text ),ProgramState t r)] -> m ()
+reportActiveThreads activeCallback runnableThreads = do
+  let active = fst <$> filter (isProgramStateActive . snd) runnableThreads 
+  activeCallback 0 active
+  
 checkIsComplete :: (MonadState (LoopState t r) m) => [(( Text ),ProgramState t r)] -> m Bool
 checkIsComplete runnableThreads  =
   let
@@ -317,10 +324,11 @@ checkIsComplete runnableThreads  =
 evalMultiDslTest ::
   (Monad m, Functor t, TestEvaluator m) =>
   (Text -> TestCustomCommandStep t m) ->
+  (Int -> [Text] -> m ()) ->
   EvalState ->
   ExecutionTree (TestProgram t a) ->
   m (ExecutionTree (ThreadResult a))
-evalMultiDslTest stepCustomCommand testState threadMap =
+evalMultiDslTest stepCustomCommand  activeCallback testState threadMap =
     let loopState = buildLoopState threadMap testState
     in evalStateT go loopState
   where
@@ -336,9 +344,11 @@ evalMultiDslTest stepCustomCommand testState threadMap =
               if isComplete then
                 buildResults
               else do
+                reportActiveThreads (\a b -> lift $ activeCallback a b) runnable
                 progressThread nextProgram
+                loopStateIterations %= (+1)
                 go
-    progressThread ((threadName),p) = do
+    progressThread (threadName,p) = do
         (currentThreadUpdate,newThreadUpdate) <- stepEvalThread (\x -> lift $ stepCustomCommand threadName x) p
         let updateCurrentThread =
                 updateWithKeyExecutionTree
@@ -360,5 +370,5 @@ evalDslTest ::
 evalDslTest stepCustomCommand threadName p =
   let
     inputMap = ExecutionTree $ Map.singleton threadName p
-    resultSet = evalMultiDslTest stepCustomCommand emptyEvalState inputMap
+    resultSet = evalMultiDslTest stepCustomCommand (\_ _ -> return ()) emptyEvalState inputMap
   in fromThreadResult . fromJust . (getExecutionTreeEntry threadName) <$> resultSet
