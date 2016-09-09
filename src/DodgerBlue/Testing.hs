@@ -254,8 +254,9 @@ instance TestEvaluator Identity where
   chooseNextThread Nothing ((k,x) :| _) = return (k,x)
   chooseNextThread (Just lastKey) (x :| xs) =
     let
-      next = headMay $ dropWhile (\(k,_) -> k /= lastKey) (x:xs)
-    in return (fromMaybe x next)
+      afterLastKey = headMay $ dropWhile (\(k,_) -> k /= lastKey) (x:xs)
+      next = fromMaybe x afterLastKey
+    in (traceM . show . fst) next >> return next
 
 instance TestEvaluator IO where
   chooseNextThread Nothing ((k,x) :| _) = return (k,x)
