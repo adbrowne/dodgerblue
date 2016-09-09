@@ -294,10 +294,14 @@ resetIdleCount = setIdleCount Nothing
 setAllIdle :: (MonadState (LoopState t r) m) => m ()
 setAllIdle = loopStatePrograms %= fmap resetIdleCount
 
-reportActiveThreads :: (MonadState (LoopState t r) m) => (Int -> [Text] -> m ()) -> [(( Text ),ProgramState t r)] -> m ()
+type ActiveCallback m = Monad m => Int -> Bool -> [Text] -> [Text] -> m ()
+
+reportActiveThreads :: (MonadState (LoopState t r) m) => ActiveCallback m -> [(( Text ),ProgramState t r)] -> m ()
 reportActiveThreads activeCallback runnableThreads = do
   let active = fst <$> filter (isProgramStateActive . snd) runnableThreads 
-  activeCallback 0 active
+  let notIdle = fst <$> filter (not . isProgramStateIdle . snd) runnableThreads 
+  inIdleCoolDown <- use loopStateInIdleCoolDown 
+  activeCallback 0 inIdleCoolDown active notIdle
   
 checkIsComplete :: (MonadState (LoopState t r) m) => [(( Text ),ProgramState t r)] -> m Bool
 checkIsComplete runnableThreads  =
@@ -324,7 +328,7 @@ checkIsComplete runnableThreads  =
 evalMultiDslTest ::
   (Monad m, Functor t, TestEvaluator m) =>
   (Text -> TestCustomCommandStep t m) ->
-  (Int -> [Text] -> m ()) ->
+  ActiveCallback m ->
   EvalState ->
   ExecutionTree (TestProgram t a) ->
   m (ExecutionTree (ThreadResult a))
@@ -344,7 +348,7 @@ evalMultiDslTest stepCustomCommand  activeCallback testState threadMap =
               if isComplete then
                 buildResults
               else do
-                reportActiveThreads (\a b -> lift $ activeCallback a b) runnable
+                reportActiveThreads (\a b c d -> lift $ activeCallback a b c d) runnable
                 progressThread nextProgram
                 loopStateIterations %= (+1)
                 go
@@ -370,5 +374,5 @@ evalDslTest ::
 evalDslTest stepCustomCommand threadName p =
   let
     inputMap = ExecutionTree $ Map.singleton threadName p
-    resultSet = evalMultiDslTest stepCustomCommand (\_ _ -> return ()) emptyEvalState inputMap
+    resultSet = evalMultiDslTest stepCustomCommand (\_ _ _ _ -> return ()) emptyEvalState inputMap
   in fromThreadResult . fromJust . (getExecutionTreeEntry threadName) <$> resultSet
