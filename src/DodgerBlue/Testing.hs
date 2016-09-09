@@ -26,7 +26,7 @@ where
 
 import           Control.Lens
 import           Debug.Trace
-import           Data.Maybe (fromJust, catMaybes)
+import           Data.Maybe (fromJust, catMaybes, fromMaybe)
 import           Data.Monoid
 import           Data.List.NonEmpty hiding (head, dropWhile, filter)
 import           Control.Monad.Free.Church
@@ -41,6 +41,7 @@ import qualified Data.Map.Strict as Map
 import           Data.Typeable
 import qualified DodgerBlue.InMemoryQueues as MemQ
 import           DodgerBlue.Types
+import           Safe
 import           Test.QuickCheck
 import           Test.QuickCheck.Instances ()
 
@@ -251,7 +252,10 @@ class TestEvaluator m where
 
 instance TestEvaluator Identity where
   chooseNextThread Nothing ((k,x) :| _) = return (k,x)
-  chooseNextThread (Just _) ((k,x) :| _) = return (k,x)
+  chooseNextThread (Just lastKey) (x :| xs) =
+    let
+      next = headMay $ dropWhile (\(k,_) -> k /= lastKey) (x:xs)
+    in return (fromMaybe x next)
 
 instance TestEvaluator IO where
   chooseNextThread Nothing ((k,x) :| _) = return (k,x)
