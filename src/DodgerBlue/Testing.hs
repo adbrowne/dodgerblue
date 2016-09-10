@@ -261,6 +261,15 @@ runnablePrograms  t = (fmap catMaybes) . sequenceA $ foldlWithKey' acc [] t
 class TestEvaluator m where
   chooseNextThread :: Maybe Text -> NonEmpty (Text, a) -> m (Text, a)
 
+chooseNextThreadIdentity :: (Monad m, Eq t, Show t) => Maybe t -> NonEmpty (t, b) -> m (t, b)
+chooseNextThreadIdentity Nothing ((k,x) :| _) =
+  traceM "TestEvaluator Identity Nothing" >> return (k,x)
+chooseNextThreadIdentity (Just lastKey) (x :| xs) =
+  let
+    afterLastKey = headMay $ dropWhile (\(k,_) -> k /= lastKey) (x:xs)
+    next = fromMaybe x afterLastKey
+  in (traceM . ("identity" <>) . show . fst) next >> return next
+
 instance TestEvaluator Identity where
   chooseNextThread Nothing ((k,x) :| _) =
     traceM "TestEvaluator Identity Nothing" >> return (k,x)
@@ -378,8 +387,8 @@ evalMultiDslTest stepCustomCommand  activeCallback testState threadMap =
                 go
     runAThread runnable = do
       lastRun <- use loopStateLastRan
-      nextProgram@(nextProgramKeys, _) <- chooseNextThread lastRun runnable
-      traceM ("lastRun: " <> show lastRun <> "next: " <> show nextProgramKeys)
+      nextProgram@(nextProgramKeys, _) <- chooseNextThreadIdentity lastRun runnable
+      traceM ("lastRun: " <> show lastRun <> " next: " <> show nextProgramKeys)
       loopStateLastRan .= Just nextProgramKeys
       loopStateIterations %= (+1)
       progressThread nextProgram
