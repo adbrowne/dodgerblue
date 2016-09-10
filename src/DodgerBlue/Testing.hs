@@ -25,7 +25,6 @@ module DodgerBlue.Testing
 where
 
 import           Control.Lens
-import           Debug.Trace
 import           Data.Maybe (fromJust, catMaybes, fromMaybe)
 import           Data.Monoid
 import           Data.List.NonEmpty hiding (head, dropWhile, filter, drop)
@@ -262,13 +261,12 @@ class TestEvaluator m where
   chooseNextThread :: Maybe Text -> NonEmpty (Text, a) -> m (Text, a)
 
 chooseNextThreadGeneric :: (Monad m, Eq t, Show t) => Maybe t -> NonEmpty (t, b) -> m (t, b)
-chooseNextThreadGeneric Nothing ((k,x) :| _) =
-  traceM "TestEvaluator Identity Nothing" >> return (k,x)
-chooseNextThreadIdentity (Just lastKey) (x :| xs) =
+chooseNextThreadGeneric Nothing ((k,x) :| _) = return (k,x)
+chooseNextThreadGeneric (Just lastKey) (x :| xs) =
   let
     afterLastKey = headMay $ drop 1 $ dropWhile (\(k,_) -> k /= lastKey) (x:xs)
     next = fromMaybe x afterLastKey
-  in (traceM . ("identity" <>) . show . fst) next >> return next
+  in return next
 
 instance TestEvaluator Identity where
   chooseNextThread = chooseNextThreadGeneric
@@ -277,16 +275,14 @@ instance TestEvaluator IO where
   chooseNextThread = chooseNextThreadGeneric
 
 instance TestEvaluator Gen where
-  chooseNextThread _ (x :| xs) = do
-    n <- Test.QuickCheck.elements (x:xs)
-    traceM ("next thread: " <> show (fst n))
-    return n
+  chooseNextThread _ (x :| xs) =
+    Test.QuickCheck.elements (x:xs)
 
 instance (TestEvaluator m, Monad m) => TestEvaluator (StateT s m) where
-  chooseNextThread a b = traceM "state" >> lift $ chooseNextThread a b
+  chooseNextThread a b = lift $ chooseNextThread a b
 
 instance (Monad m, TestEvaluator m) => TestEvaluator (ReaderT r m) where
-  chooseNextThread a b = traceM "reader" >> lift $ chooseNextThread a b
+  chooseNextThread a b = lift $ chooseNextThread a b
 
 mapInsertUniqueKeyWithSuffix :: Text -> a -> Map Text a -> Map Text a
 mapInsertUniqueKeyWithSuffix suffix x m =
@@ -381,7 +377,6 @@ evalMultiDslTest stepCustomCommand  activeCallback testState threadMap =
     runAThread runnable = do
       lastRun <- use loopStateLastRan
       nextProgram@(nextProgramKeys, _) <- chooseNextThread lastRun runnable
-      traceM ("lastRun: " <> show lastRun <> " next: " <> show nextProgramKeys)
       loopStateLastRan .= Just nextProgramKeys
       loopStateIterations %= (+1)
       progressThread nextProgram
