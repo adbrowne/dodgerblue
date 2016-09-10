@@ -373,9 +373,9 @@ evalMultiDslTest stepCustomCommand  activeCallback testState threadMap =
                   loopStateIterations %= (+1)
                   go
               else do
-                runSomePrograms (x:|xs)
+                runAThread (x:|xs)
                 go
-    runSomePrograms runnable = do
+    runAThread runnable = do
       lastRun <- use loopStateLastRan
       nextProgram@(nextProgramKeys, _) <- chooseNextThread lastRun runnable
       loopStateLastRan .= Just nextProgramKeys
