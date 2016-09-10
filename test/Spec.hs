@@ -92,7 +92,6 @@ drainQueue q =
       readResult <- STM.tryReadTQueue q
       maybe (return acc) (\x -> go (x:acc)) readResult
 
-
 parentThreadShouldKillChild :: SpecWith ()
 parentThreadShouldKillChild =
   it "When a parent thread exits the child should stop" $ do
