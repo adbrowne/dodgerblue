@@ -28,7 +28,7 @@ import           Control.Lens
 import           Debug.Trace
 import           Data.Maybe (fromJust, catMaybes, fromMaybe)
 import           Data.Monoid
-import           Data.List.NonEmpty hiding (head, dropWhile, filter)
+import           Data.List.NonEmpty hiding (head, dropWhile, filter, drop)
 import           Control.Monad.Free.Church
 import qualified Control.Monad.Free                     as Free
 import           Control.Monad.State
@@ -266,7 +266,7 @@ chooseNextThreadIdentity Nothing ((k,x) :| _) =
   traceM "TestEvaluator Identity Nothing" >> return (k,x)
 chooseNextThreadIdentity (Just lastKey) (x :| xs) =
   let
-    afterLastKey = headMay $ dropWhile (\(k,_) -> k /= lastKey) (x:xs)
+    afterLastKey = headMay $ drop 1 $ dropWhile (\(k,_) -> k /= lastKey) (x:xs)
     next = fromMaybe x afterLastKey
   in (traceM . ("identity" <>) . show . fst) next >> return next
 
