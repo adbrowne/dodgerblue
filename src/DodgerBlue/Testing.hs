@@ -230,6 +230,17 @@ isProgramBlocked (Free.Free (DslBase (ReadQueue' q _n))) = do
   return $ MemQ.isEmptyQueue qs q
 isProgramBlocked _ = return False
 
+allIncompletePrograms :: (Functor t) => ExecutionTree (ProgramState t a) -> [(Text,ProgramState t a)]
+allIncompletePrograms t = catMaybes $ foldlWithKey' acc [] t
+ where acc xs threadName programState =
+         (justIfRunnable threadName programState):xs
+       justIfRunnable threadName programState@(ExternalProgramRunning _) = 
+         Just (threadName, programState)
+       justIfRunnable _ (ExternalProgramComplete _) =
+         Nothing
+       justIfRunnable threadName programState@(InternalProgramRunning _) = 
+         Just (threadName, programState)
+
 runnablePrograms :: (MonadState (LoopState t a) m, Monad m, Functor t) => ExecutionTree (ProgramState t a) -> m [(Text,ProgramState t a)]
 runnablePrograms  t = (fmap catMaybes) . sequenceA $ foldlWithKey' acc [] t
  where acc xs threadName programState =
@@ -347,20 +358,30 @@ evalMultiDslTest stepCustomCommand  activeCallback testState threadMap =
   where
     go  = do
         LoopState {..} <- LazyState.get
-        runnable <- runnablePrograms _loopStatePrograms
-        case runnable of
+        let inCompletePrograms = allIncompletePrograms _loopStatePrograms
+        case inCompletePrograms of
             [] -> buildResults
             (x:xs) -> do
-              nextProgram@(nextProgramKeys, _) <- chooseNextThread _loopStateLastRan (x:|xs)
-              loopStateLastRan .= Just nextProgramKeys
-              isComplete <- checkIsComplete runnable
-              if isComplete then
-                buildResults
-              else do
+              iterationCount <- use loopStateIterations
+              if mod iterationCount 1000 == 0 then do
+                runnable <- runnablePrograms _loopStatePrograms
                 reportActiveThreads (\a b c d -> lift $ activeCallback a b c d) runnable
-                progressThread nextProgram
-                loopStateIterations %= (+1)
+                isComplete <- checkIsComplete runnable
+                if isComplete then
+                  buildResults
+                else do
+                  loopStateIterations %= (+1)
+                  go
+              else do
+                runSomePrograms (x:|xs)
                 go
+    runSomePrograms runnable = do
+      lastRun <- use loopStateLastRan
+      nextProgram@(nextProgramKeys, _) <- chooseNextThread lastRun runnable
+      loopStateLastRan .= Just nextProgramKeys
+      loopStateIterations %= (+1)
+      progressThread nextProgram
+
     progressThread (threadName,p) = do
         (currentThreadUpdate,newThreadUpdate) <- stepEvalThread (\x -> lift $ stepCustomCommand threadName x) p
         let updateCurrentThread =

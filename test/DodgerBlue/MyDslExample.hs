@@ -13,6 +13,7 @@ module DodgerBlue.MyDslExample
   ,writeFromAChildProcess
   ,DodgerBlue.MyDslExample.wait
   ,waitFree
+  ,fooFree
   ,readForever
   ,idleForever
   ,forkChildAndExit
@@ -42,7 +43,8 @@ import qualified DodgerBlue.Testing
 import           Test.QuickCheck
 
 data MyDslFunctions next =
-    MyDslWait Int next
+    MyDslFoo Int next
+    | MyDslWait Int next
     deriving (Functor)
 
 type MyDsl q = F (DodgerBlue.CustomDsl q MyDslFunctions)
@@ -99,6 +101,11 @@ waitFree
     :: (MonadFree (DodgerBlue.CustomDsl q MyDslFunctions) m)
     => Int -> m ()
 waitFree seconds = DodgerBlue.Testing.customCmd $ MyDslWait seconds ()
+
+fooFree
+    :: (MonadFree (DodgerBlue.CustomDsl q MyDslFunctions) m)
+    => Int -> m ()
+fooFree x = DodgerBlue.Testing.customCmd $ MyDslFoo x ()
 
 writeAndTryRead
     :: MonadMyDsl m
@@ -174,9 +181,11 @@ waitIO milliseconds = threadDelay (milliseconds * 1000)
 
 runMyDslFunctionIO :: MyDslFunctions (IO a) -> IO a
 runMyDslFunctionIO (MyDslWait milliseconds n) = waitIO milliseconds  >> n
+runMyDslFunctionIO (MyDslFoo _ignored n) = n
 
 runMyDslFunctionTest :: Monad m => Text -> MyDslFunctions (a) -> m a
 runMyDslFunctionTest _threadName (MyDslWait _milliseconds n) = return n
+runMyDslFunctionTest _threadName (MyDslFoo _ignored n) = return n
 
 myEvalIO :: MyDsl TQueue a -> IO a
 myEvalIO =
