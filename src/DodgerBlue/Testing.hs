@@ -268,11 +268,11 @@ instance TestEvaluator Identity where
     let
       afterLastKey = headMay $ dropWhile (\(k,_) -> k /= lastKey) (x:xs)
       next = fromMaybe x afterLastKey
-    in (traceM . show . fst) next >> return next
+    in (traceM . ("identity" <>) . show . fst) next >> return next
 
 instance TestEvaluator IO where
-  chooseNextThread Nothing ((k,x) :| _) = return (k,x)
-  chooseNextThread (Just _) ((k,x) :| _) = return (k,x)
+  chooseNextThread Nothing ((k,x) :| _) = traceM "io suprise" >> return (k,x)
+  chooseNextThread (Just _) ((k,x) :| _) = traceM "io surprise" >> return (k,x)
 
 instance TestEvaluator Gen where
   chooseNextThread _ (x :| xs) = do
@@ -281,10 +281,10 @@ instance TestEvaluator Gen where
     return n
 
 instance (TestEvaluator m, Monad m) => TestEvaluator (StateT s m) where
-  chooseNextThread a b = lift $ chooseNextThread a b
+  chooseNextThread a b = traceM "state" >> lift $ chooseNextThread a b
 
 instance (Monad m, TestEvaluator m) => TestEvaluator (ReaderT r m) where
-  chooseNextThread a b = lift $ chooseNextThread a b
+  chooseNextThread a b = traceM "reader" >> lift $ chooseNextThread a b
 
 mapInsertUniqueKeyWithSuffix :: Text -> a -> Map Text a -> Map Text a
 mapInsertUniqueKeyWithSuffix suffix x m =
