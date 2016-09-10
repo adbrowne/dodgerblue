@@ -262,7 +262,8 @@ class TestEvaluator m where
   chooseNextThread :: Maybe Text -> NonEmpty (Text, a) -> m (Text, a)
 
 instance TestEvaluator Identity where
-  chooseNextThread Nothing ((k,x) :| _) = return (k,x)
+  chooseNextThread Nothing ((k,x) :| _) =
+    traceM "TestEvaluator Identity Nothing" >> return (k,x)
   chooseNextThread (Just lastKey) (x :| xs) =
     let
       afterLastKey = headMay $ dropWhile (\(k,_) -> k /= lastKey) (x:xs)
