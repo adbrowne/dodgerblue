@@ -8,6 +8,7 @@
 import qualified Data.Map.Strict         as Map
 import           Data.Monoid
 import           Control.Monad.Trans.Resource
+import           Control.Monad (replicateM_)
 import           Control.Concurrent.STM as STM
 import           Control.Concurrent (threadDelay)
 import           DodgerBlue.MyDslExample
@@ -63,6 +64,22 @@ childThreadShouldBlowUpParent =
       wait 1000
       _ <- error "parent thread blew up" -- shouldn't happen as the child thread should blow up first
       return (1 :: Int)
+
+perfTest :: SpecWith ()
+perfTest =
+  it "should not be slow" $ do
+    myEvalMultiDslTest startTree `shouldBe` expectedResult
+  where
+    startTree = ExecutionTree $ Map.singleton "MyProgram" myProgram
+    expectedResult = ExecutionTree $ Map.singleton "MyProgram" (ThreadResult 'a')
+    myProgram = do
+      q <- newQueue
+      writeQueue q 'a'
+      replicateM_ 25 (forkChild "listenThread" $ listenQ q)
+      loop (1000000000 :: Int)
+    listenQ q = readQueue q >> listenQ q
+    loop 0 = return 'a'
+    loop acc = loop (acc - 1)
 
 delay :: Int -> IO ()
 delay milliseconds = threadDelay (milliseconds * 1000)
@@ -132,6 +149,7 @@ main = do
     unitTestSpecsNoFree <- testSpec "Unit tests - NoFree" (unitTestSpecs runResourceT)
     unitTestTestInterpreter <- testSpec "Unit tests - test interpreter" testInterpreterUnitTests
     unitTestIO <- testSpec "Unit tests - IO" ioUnitTests
+    unitTestPerf <- testSpec "Perf" perfTest
     defaultMain $
         testGroup
             "Tests"
@@ -140,6 +158,7 @@ main = do
             , unitTestSpecsNoFree
             , unitTestTestInterpreter 
             , unitTestIO
+            , unitTestPerf
             , testProperty 
                   "All programs have an output"
                   prop_allProgramsHaveAnOutput
