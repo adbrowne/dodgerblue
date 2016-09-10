@@ -76,10 +76,10 @@ perfTest =
       q <- newQueue
       writeQueue q 'a'
       replicateM_ 25 (forkChild "listenThread" $ listenQ q)
-      loop (1000000000 :: Int)
+      loop (100000 :: Int)
     listenQ q = readQueue q >> listenQ q
     loop 0 = return 'a'
-    loop acc = loop (acc - 1)
+    loop acc = waitFree 1000 >> loop (acc - 1)
 
 delay :: Int -> IO ()
 delay milliseconds = threadDelay (milliseconds * 1000)

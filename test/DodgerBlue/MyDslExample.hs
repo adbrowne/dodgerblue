@@ -12,6 +12,7 @@ module DodgerBlue.MyDslExample
   ,writeAndRead
   ,writeFromAChildProcess
   ,DodgerBlue.MyDslExample.wait
+  ,waitFree
   ,readForever
   ,idleForever
   ,forkChildAndExit
