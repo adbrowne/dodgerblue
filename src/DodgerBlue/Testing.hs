@@ -81,10 +81,6 @@ mapMaybeExecutionTree :: (a -> Maybe b) -> ExecutionTree a -> ExecutionTree b
 mapMaybeExecutionTree f ExecutionTree{..} =
   ExecutionTree $ Map.mapMaybe f unExecutionTree
 
-updateWithKeyExecutionTree :: (a -> Maybe a) -> Text -> ExecutionTree a -> ExecutionTree a
-updateWithKeyExecutionTree f threadName (ExecutionTree t) =
-  ExecutionTree $ (Map.update f threadName) t
-
 getExecutionTreeEntry :: Text -> ExecutionTree a -> Maybe a
 getExecutionTreeEntry threadName ExecutionTree{..} =
   Map.lookup threadName unExecutionTree
@@ -207,6 +203,22 @@ stepEvalThread stepCustomCommand (ExternalProgramRunning (p,idleCount)) = do
                  StepResultFork n childName newProgram -> return $ (Just (ExternalProgramRunning (n,idleCount)), Just (childName, mkInternalProgramRunning newProgram))
 stepEvalThread _ (ExternalProgramComplete a) = return (Just (ExternalProgramComplete a), Nothing)
 
+multiStepEvalThread ::
+  (MonadState (LoopState t r) m, Functor t) =>
+  Int ->
+  TestCustomCommandStep t m ->
+  ProgramState t r ->
+  m (Maybe (ProgramState t r), [(Text, ProgramState t r)])
+multiStepEvalThread maxSteps stepCustomCommand initialProgramState =
+  go maxSteps (Just initialProgramState) [] 
+  where
+    go _ Nothing newThreads = return (Nothing, newThreads)
+    go 0 programState newThreads = return (programState, newThreads)
+    go n (Just programState) newThreads = do
+       (nextProgramState, newThread) <- stepEvalThread stepCustomCommand programState
+       let newThreads' = maybe newThreads (:newThreads) newThread
+       go (n - 1) nextProgramState newThreads'
+
 buildResults :: MonadState (LoopState t a) m => m (ExecutionTree (ThreadResult a))
 buildResults  = do
   LoopState {..} <- get
@@ -229,17 +241,6 @@ isProgramBlocked (Free.Free (DslBase (ReadQueue' q _n))) = do
   return $ MemQ.isEmptyQueue qs q
 isProgramBlocked _ = return False
 
-allIncompletePrograms :: (Functor t) => ExecutionTree (ProgramState t a) -> [(Text,ProgramState t a)]
-allIncompletePrograms t = catMaybes $ foldlWithKey' acc [] t
- where acc xs threadName programState =
-         (justIfRunnable threadName programState):xs
-       justIfRunnable threadName programState@(ExternalProgramRunning _) = 
-         Just (threadName, programState)
-       justIfRunnable _ (ExternalProgramComplete _) =
-         Nothing
-       justIfRunnable threadName programState@(InternalProgramRunning _) = 
-         Just (threadName, programState)
-
 runnablePrograms :: (MonadState (LoopState t a) m, Monad m, Functor t) => ExecutionTree (ProgramState t a) -> m [(Text,ProgramState t a)]
 runnablePrograms  t = (fmap catMaybes) . sequenceA $ foldlWithKey' acc [] t
  where acc xs threadName programState =
@@ -256,6 +257,24 @@ runnablePrograms  t = (fmap catMaybes) . sequenceA $ foldlWithKey' acc [] t
          if isBlocked then
            return $ Nothing
          else return $ Just (threadName, programState)
+
+iteratePrograms :: (MonadState (LoopState t a) m, Monad m, Functor t)
+                => (Text -> TestCustomCommandStep t m)
+                -> ExecutionTree (ProgramState t a)
+                -> m (ExecutionTree (ProgramState t a))
+iteratePrograms stepCustomCommand (ExecutionTree  t) = do
+    intermediate <- Map.traverseWithKey iterateProgram t
+    return (ExecutionTree (Map.foldlWithKey' updateTree mempty intermediate))
+    where
+      iterateProgram threadName =
+        multiStepEvalThread 10 (stepCustomCommand threadName)
+      updateTree :: Map Text (ProgramState t a) -> Text -> (Maybe (ProgramState t a), [(Text, ProgramState t a)]) -> Map Text (ProgramState t a)  
+      updateTree s threadName (thisThread, newThreads) =
+        let
+          s' = insertIfJust threadName thisThread s
+        in foldr (\(k,v) s'' -> mapInsertUniqueKeyWithSuffix k v s'') s' newThreads
+      insertIfJust _key Nothing x = x
+      insertIfJust key (Just value) x = Map.insert key value x
 
 class TestEvaluator m where
   chooseNextThread :: Maybe Text -> NonEmpty (Text, a) -> m (Text, a)
@@ -357,42 +376,21 @@ evalMultiDslTest stepCustomCommand  activeCallback testState threadMap =
   where
     go  = do
         LoopState {..} <- LazyState.get
-        let inCompletePrograms = allIncompletePrograms _loopStatePrograms
-        case inCompletePrograms of
-            [] -> buildResults
-            (x:xs) -> do
-              iterationCount <- use loopStateIterations
-              if mod iterationCount 1000 == 0 then do
-                runnable <- runnablePrograms _loopStatePrograms
-                reportActiveThreads (\a b c d -> lift $ activeCallback a b c d) runnable
-                isComplete <- checkIsComplete runnable
-                if isComplete then
-                  buildResults
-                else do
-                  loopStateIterations %= (+1)
-                  go
-              else do
-                runAThread (x:|xs)
-                go
-    runAThread runnable = do
-      lastRun <- use loopStateLastRan
-      nextProgram@(nextProgramKeys, _) <- chooseNextThread lastRun runnable
-      loopStateLastRan .= Just nextProgramKeys
-      loopStateIterations %= (+1)
-      progressThread nextProgram
-
-    progressThread (threadName,p) = do
-        (currentThreadUpdate,newThreadUpdate) <- stepEvalThread (\x -> lift $ stepCustomCommand threadName x) p
-        let updateCurrentThread =
-                updateWithKeyExecutionTree
-                    (const currentThreadUpdate)
-                    threadName
-        loopStatePrograms %= (addSubThread newThreadUpdate . updateCurrentThread)
-    addSubThread Nothing tree = tree
-    addSubThread (Just (newProgramName,  newProgramState)) (ExecutionTree t) =
-        ExecutionTree $
-            mapInsertUniqueKeyWithSuffix newProgramName newProgramState
-            t
+        iterationCount <- use loopStateIterations
+        if mod iterationCount 100 == 0 then do
+          runnable <- runnablePrograms _loopStatePrograms
+          reportActiveThreads (\a b c d -> lift $ activeCallback a b c d) runnable
+          isComplete <- checkIsComplete runnable
+          if isComplete then
+            buildResults
+          else do
+            loopStateIterations %= (+1)
+            go
+        else do
+          loopStatePrograms' <- iteratePrograms (\a b -> lift $ stepCustomCommand a b) _loopStatePrograms
+          loopStatePrograms .= loopStatePrograms'
+          loopStateIterations %= (+1)
+          go
 
 evalDslTest ::
   (Monad m, Functor t, TestEvaluator m) =>
