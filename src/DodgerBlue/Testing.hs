@@ -114,7 +114,7 @@ runTryReadQueueCmd q = do
   testQueues .= qs'
   return x
 
-runNewQueueCmd :: (MonadState (LoopState t r) m, Typeable a) => m (MemQ.Queue a)
+runNewQueueCmd :: (MonadState (LoopState t r) m) => m (MemQ.Queue a)
 runNewQueueCmd = do
   qs <- use testQueues
   let (x, qs') = MemQ.newQueue qs
@@ -235,13 +235,13 @@ buildResults  = do
 foldlWithKey' :: (s -> Text -> a -> s) -> s -> ExecutionTree a -> s
 foldlWithKey' acc z (ExecutionTree t) = Map.foldlWithKey' (\s threadName v -> acc s threadName v) z t
 
-isProgramBlocked :: (MonadState (LoopState t a) m, Functor t) => TestProgramFree t b -> m (Bool)
+isProgramBlocked :: (MonadState (LoopState t a) m) => TestProgramFree t b -> m Bool
 isProgramBlocked (Free.Free (DslBase (ReadQueue' q _n))) = do
   qs <- use testQueues
   return $ MemQ.isEmptyQueue qs q
 isProgramBlocked _ = return False
 
-runnablePrograms :: (MonadState (LoopState t a) m, Monad m, Functor t) => ExecutionTree (ProgramState t a) -> m [(Text,ProgramState t a)]
+runnablePrograms :: (MonadState (LoopState t a) m) => ExecutionTree (ProgramState t a) -> m [(Text,ProgramState t a)]
 runnablePrograms  t = (fmap catMaybes) . sequenceA $ foldlWithKey' acc [] t
  where acc xs threadName programState =
          (justIfRunnable threadName programState):xs
@@ -258,7 +258,7 @@ runnablePrograms  t = (fmap catMaybes) . sequenceA $ foldlWithKey' acc [] t
            return $ Nothing
          else return $ Just (threadName, programState)
 
-iteratePrograms :: (MonadState (LoopState t a) m, Monad m, Functor t)
+iteratePrograms :: (MonadState (LoopState t a) m, Functor t)
                 => (Text -> TestCustomCommandStep t m)
                 -> ExecutionTree (ProgramState t a)
                 -> m (ExecutionTree (ProgramState t a))
@@ -279,7 +279,7 @@ iteratePrograms stepCustomCommand (ExecutionTree  t) = do
 class TestEvaluator m where
   chooseNextThread :: Maybe Text -> NonEmpty (Text, a) -> m (Text, a)
 
-chooseNextThreadGeneric :: (Monad m, Eq t, Show t) => Maybe t -> NonEmpty (t, b) -> m (t, b)
+chooseNextThreadGeneric :: (Monad m, Eq t) => Maybe t -> NonEmpty (t, b) -> m (t, b)
 chooseNextThreadGeneric Nothing ((k,x) :| _) = return (k,x)
 chooseNextThreadGeneric (Just lastKey) (x :| xs) =
   let
@@ -364,7 +364,7 @@ checkIsComplete runnableThreads  =
         return False
 
 evalMultiDslTest ::
-  (Monad m, Functor t, TestEvaluator m) =>
+  (Monad m, Functor t) =>
   (Text -> TestCustomCommandStep t m) ->
   ActiveCallback m ->
   EvalState ->
@@ -393,7 +393,7 @@ evalMultiDslTest stepCustomCommand  activeCallback testState threadMap =
           go
 
 evalDslTest ::
-  (Monad m, Functor t, TestEvaluator m) =>
+  (Monad m, Functor t) =>
   (Text -> TestCustomCommandStep t m) ->
   Text ->
   F (CustomDsl MemQ.Queue t) a ->
